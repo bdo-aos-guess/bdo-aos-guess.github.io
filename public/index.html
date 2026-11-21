@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>AOS Asia – Guess the Winner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -342,9 +344,10 @@ async function loadData() {
   const cutoff = Date.now() - DATA.keepDays * 864e5;
   DATA.matches = DATA.matches.filter((m) => new Date(m.t).getTime() >= cutoff && [...m.a, ...m.b].every((p) => p.r >= MIN_RATING));
 }
+const N = (v) => (v == null ? null : (Number.isFinite(Number(v)) ? Number(v) : 0));
 const winnerIsA = (m) => atob(m.w)[4] === "1";
-const pubP = (p) => ({ name: p.n, cls: p.c });
-const fullP = (p) => ({ name: p.n, cls: p.c, kills: p.k, deaths: p.d, rating: p.r, rank: p.k2, dd: p.dd, dt: p.dt, rc: p.rc, cc: p.cc, pd: p.pd });
+const pubP = (p) => ({ name: String(p.n), cls: String(p.c) });
+const fullP = (p) => ({ name: String(p.n), cls: String(p.c), kills: N(p.k), deaths: N(p.d), rating: N(p.r), rank: N(p.k2), dd: N(p.dd), dt: N(p.dt), rc: N(p.rc), cc: N(p.cc), pd: N(p.pd) });
 const Api = {
   quiz(seenIds) {
     const all = DATA ? DATA.matches : [];
@@ -362,7 +365,7 @@ const Api = {
   },
   hint(id) {
     const { m, flip } = byId.get(id);
-    const h = (p) => ({ rating: p.r, rank: p.k2 });
+    const h = (p) => ({ rating: N(p.r), rank: N(p.k2) });
     return { teamA: (flip ? m.b : m.a).map(h), teamB: (flip ? m.a : m.b).map(h) };
   },
   guess(id, pick) {
