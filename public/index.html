@@ -348,18 +348,35 @@ const N = (v) => (v == null ? null : (Number.isFinite(Number(v)) ? Number(v) : 0
 const winnerIsA = (m) => atob(m.w)[4] === "1";
 const pubP = (p) => ({ name: String(p.n), cls: String(p.c) });
 const fullP = (p) => ({ name: String(p.n), cls: String(p.c), kills: N(p.k), deaths: N(p.d), rating: N(p.r), rank: N(p.k2), dd: N(p.dd), dt: N(p.dt), rc: N(p.rc), cc: N(p.cc), pd: N(p.pd) });
+// better randomness than Math.random (uses the browser's secure generator when available)
+const randInt = (n) => {
+  try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; } catch { return Math.floor(Math.random() * n); }
+};
+let recentList = [], recentNames = new Set(), lastClassKey = "";
 const Api = {
   quiz(seenIds) {
     const all = DATA ? DATA.matches : [];
+    if (!all.length) return { error: "No recent matches available yet. Please try again later." };
     const seen = new Set(seenIds);
-    let pool = all.filter((m) => !seen.has(m.t + m.s + m.a[0].n));
-    if (!pool.length) pool = all;
-    if (!pool.length) return { error: "No recent matches available yet. Please try again later." };
-    const sorted = [...pool].sort((x, y) => (y.t > x.t ? 1 : -1));
-    const from = Math.random() < 0.7 ? sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 2))) : sorted;
-    const m = from[Math.floor(Math.random() * from.length)];
-    const flip = Math.random() < 0.5;
-    const id = m.t + m.s + m.a[0].n;
+    const idOf = (m) => m.t + m.s + m.a[0].n;
+    const names = (m) => [...m.a, ...m.b].map((p) => p.n);
+    const classKey = (m) => [...m.a, ...m.b].map((p) => p.c).sort().join(",");
+    // Strictest first: never played before, none of the last players, not the same class mix as last time.
+    // If that leaves nothing, relax the rules step by step so a round is always found.
+    const unseen = all.filter((m) => !seen.has(idOf(m)));
+    const tries = [
+      unseen.filter((m) => !names(m).some((n) => recentNames.has(n)) && classKey(m) !== lastClassKey),
+      unseen.filter((m) => !names(m).some((n) => recentNames.has(n))),
+      unseen,
+      all.filter((m) => !names(m).some((n) => recentNames.has(n))),
+      all,
+    ];
+    const pool = tries.find((t) => t.length) || all;
+    const m = pool[randInt(pool.length)];   // every match in the pool is equally likely (no bias to newest)
+    const flip = randInt(2) === 1;
+    recentList.push(...names(m)); while (recentList.length > 18) recentList.shift();   // remember the last 3 matches' players
+    recentNames = new Set(recentList); lastClassKey = classKey(m);
+    const id = idOf(m);
     byId.set(id, { m, flip });
     return { id, seenId: id, date: m.t, teamA: (flip ? m.b : m.a).map(pubP), teamB: (flip ? m.a : m.b).map(pubP) };
   },
@@ -478,7 +495,7 @@ async function next() {
   $('bA').disabled = $('bB').disabled = true;
   $('pA').innerHTML = $('pB').innerHTML = skeletons;
   let q;
-  try { if (!DATA) await loadData(); q = Api.quiz(prof.seen.slice(-60)); }
+  try { if (!DATA) await loadData(); q = Api.quiz(prof.seen.slice(-700)); }
   catch { q = { error: 'Could not load match data.' }; }
   if (q.error) { $('result').innerHTML = `<div class="small" style="color:var(--mute)">${esc(q.error)}</div>`; setTimeout(next, 5000); return; }
   cur = q; answered = false;
@@ -506,7 +523,7 @@ async function guess(pick) {
   $('actions').style.display = 'none';
   const r = Api.guess(cur.id, pick);
   if (r.error) { g.active = true; return next(); } // match was removed from the server meanwhile: just load another
-  g.total++; prof.seen.push(cur.seenId);
+  g.total++; prof.seen.push(cur.seenId); if (prof.seen.length > 700) prof.seen = prof.seen.slice(-700);
 
   let gained = 0, m = mult();
   if (r.correct) {
