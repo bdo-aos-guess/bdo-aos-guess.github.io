@@ -34,7 +34,11 @@ async function getJSON(url, tries = 3) {
   }
 }
 
-const slim = (p) => ({ n: p.user_nickname, c: CLASSES[p.class_type] || `Class ${p.class_type}`, k: p.kill_count, d: p.death_count, r: p.rank_rating, k2: p.current_ranking });
+const slim = (p) => ({
+  n: p.user_nickname, c: CLASSES[p.class_type] || `Class ${p.class_type}`,
+  k: p.kill_count, d: p.death_count, r: p.rank_rating, k2: p.current_ranking,
+  dd: p.damage_done, dt: p.damage_taken, rc: p.recovery, cc: p.cc_applied_count, pd: p.vary_rank_rating,
+});
 const rnd = () => Math.random().toString(36).slice(2, 6).padEnd(4, 'x');
 // light scrambling so the winner is not readable at a glance in the file
 const hideWinner = (isA) => Buffer.from(rnd() + (isA ? '1' : '0') + rnd()).toString('base64');
