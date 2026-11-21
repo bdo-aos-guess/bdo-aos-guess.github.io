@@ -233,7 +233,7 @@
   .tag{font-size:.72rem;padding:3px 10px;border-radius:99px;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#2a1f05}
   .tag.def{background:#3a2326;color:#ffb3b3;border:1px solid #6b3338}
   table.st{width:100%;border-collapse:collapse;font-size:.85rem;white-space:nowrap;min-width:820px;table-layout:fixed}
-  table.st th:nth-child(1){width:23%}table.st th:nth-child(2){width:9%}table.st th:nth-child(3),table.st th:nth-child(4),table.st th:nth-child(5){width:15%}table.st th:nth-child(6){width:6%}table.st th:nth-child(7){width:10%}table.st th:nth-child(8){width:7%}
+  table.st th:nth-child(1){width:23%}table.st th:nth-child(2){width:9%}table.st th:nth-child(3){width:6%}table.st th:nth-child(4),table.st th:nth-child(5),table.st th:nth-child(6){width:15%}table.st th:nth-child(7){width:10%}table.st th:nth-child(8){width:7%}
   table.st th{color:var(--mute);font-weight:600;font-size:.68rem;text-transform:uppercase;letter-spacing:.09em;text-align:right;padding:8px 12px;border-top:1px solid var(--line)}
   table.st td{text-align:right;padding:9px 12px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums;vertical-align:middle}
   table.st th:first-child,table.st td:first-child{text-align:left}
@@ -567,12 +567,12 @@ function showStats() {
     '<td><div class="pcell"><div class="av" style="background-image:url(' + img(p.cls) + ')">' + (p === mvp ? '<span class="mv">⭐</span>' : '') + '</div>' +
     '<div><b title="' + esc(p.name) + '">' + esc(p.name) + '</b><span>' + esc(p.cls) + '</span></div></div></td>' +
     '<td><span class="kd">' + p.kills + ' / ' + p.deaths + '<small>' + kdr(p) + ' KDA</small></span></td>' +
-    bar(p, 'dd') + bar(p, 'dt') + bar(p, 'rc') +
     '<td class="' + (p.cc != null && p.cc === bk.cc && bk.cc > 0 ? 'top' : '') + '">' + num(p.cc) + '</td>' +
+    bar(p, 'dd') + bar(p, 'dt') + bar(p, 'rc') +
     '<td>' + p.rating + pdl(p.pd) + '</td><td class="rk">#' + p.rank + '</td></tr>';
   const table = (side, t) => '<div class="tblwrap ' + side + ' ' + (r.winner === side ? 'win' : 'lose') + '">' +
     '<div class="ttl"><span>Team ' + side + '</span>' + (r.winner === side ? '<span class="tag">👑 Victory</span>' : '<span class="tag def">Defeat</span>') + '</div>' +
-    '<table class="st"><tr><th>Player</th><th>K / D</th><th>Damage dealt</th><th>Damage taken</th><th>Recovery</th><th>CC</th><th>Rating</th><th>Rank</th></tr>' +
+    '<table class="st"><tr><th>Player</th><th>K / D</th><th>CC</th><th>Damage dealt</th><th>Damage taken</th><th>Recovery</th><th>Rating</th><th>Rank</th></tr>' +
     t.map(row).join('') +
     '</table></div>';
   const kills = (t) => t.reduce((s, p) => s + p.kills, 0);
