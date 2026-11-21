@@ -310,7 +310,7 @@
   </div>
 
   <div class="foot">
-    <span class="live"></span><span id="status">connecting…</span> · match played <b id="age">–</b>
+    <span class="live"></span><span id="status">connecting…</span>
   </div>
 </div>
 
@@ -478,7 +478,6 @@ async function next() {
   cur = q; answered = false;
   $('pA').innerHTML = cards(q.teamA); $('pB').innerHTML = cards(q.teamB);
   setBg(q.teamA, q.teamB);
-  $('age').textContent = ago(q.date);
   $('bA').disabled = $('bB').disabled = false; $('hintBtn').disabled = false;
   startTimer();
 }
