@@ -256,6 +256,14 @@
   .pos{color:var(--win)}.neg{color:var(--lose)}
   .rk{color:var(--mute)}
   @media(max-width:700px){.sboard{grid-template-columns:1fr 1fr}.sboard .mid{grid-column:1/3;order:3}.modal.wide{padding:14px}}
+  .modal.wide,.tblwrap{scrollbar-width:none;-ms-overflow-style:none}
+  .modal.wide::-webkit-scrollbar,.tblwrap::-webkit-scrollbar{display:none;width:0;height:0}
+  .modal.wide{padding:18px 22px}
+  table.st td{padding:7px 12px}
+  .av{width:42px;height:42px}
+  .sboard{margin:12px 0 4px;padding:10px 18px}
+  .tblwrap{margin-top:10px}
+  body.lock{overflow:hidden}
 </style>
 </head>
 <body>
@@ -562,9 +570,7 @@ function showStats() {
     '<div class="ttl"><span>Team ' + side + '</span>' + (r.winner === side ? '<span class="tag">👑 Victory</span>' : '<span class="tag def">Defeat</span>') + '</div>' +
     '<table class="st"><tr><th>Player</th><th>K / D</th><th>Damage dealt</th><th>Damage taken</th><th>Recovery</th><th>CC</th><th>Rating</th><th>Rank</th></tr>' +
     t.map(row).join('') +
-    '<tr class="tot"><td>Team total</td><td>' + t.reduce((s, p) => s + p.kills, 0) + ' / ' + t.reduce((s, p) => s + p.deaths, 0) + '</td>' +
-    '<td>' + num(sum(t, 'dd')) + '</td><td>' + num(sum(t, 'dt')) + '</td><td>' + num(sum(t, 'rc')) + '</td><td>' + num(sum(t, 'cc')) + '</td>' +
-    '<td>' + Math.round(t.reduce((s, p) => s + p.rating, 0) / t.length) + ' avg</td><td></td></tr></table></div>';
+    '</table></div>';
   const kills = (t) => t.reduce((s, p) => s + p.kills, 0);
   const mins = Math.floor(r.seconds / 60), sec = String(r.seconds % 60).padStart(2, '0');
   $('statsBox').innerHTML =
@@ -575,10 +581,10 @@ function showStats() {
     '<div class="mid"><b>' + mins + ':' + sec + '</b>match length</div>' +
     '<div class="side b"><div class="lab" style="text-align:right"><b>Team B</b>kills</div><div class="big">' + kills(r.teamB) + '</div></div></div>' +
     table('A', r.teamA) + table('B', r.teamB);
-  $('statsOv').classList.add('on');
+  $('statsOv').classList.add('on'); document.body.classList.add('lock');
   $('statsClose').onclick = closeStats;
 }
-function closeStats() { $('statsOv').classList.remove('on'); }
+function closeStats() { $('statsOv').classList.remove('on'); document.body.classList.remove('lock'); }
 
 function confetti() {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
