@@ -531,7 +531,6 @@ async function guess(pick) {
     <div class="ico">${r.correct ? '✓' : '✕'}</div>
     <div class="txt"><div class="big">${title}</div>
       <div class="small">Team ${r.winner} won · ${mins}:${sec} · MVP <b>${esc(mvp.name)}</b>${r.correct ? ` · <b>+${gained}</b>${m > 1 ? ` (x${m})` : ''}${hinted ? ' (hint)' : ''}` : ''}</div></div>
-    <div class="score"><span class="a">${kills(r.teamA)}</span><small>KILLS</small><span class="b">${kills(r.teamB)}</span></div>
   </div>`;
   const anchor = $('result');
   if (r.correct) { sfx.win(); flash('#3ecf8e'); floatText('+' + gained, 'g', anchor); confetti(); }
