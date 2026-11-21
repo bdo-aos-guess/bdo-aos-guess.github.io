@@ -1,0 +1,14 @@
+# generated on every run by the workflow
+public/data.json
+data/
+node_modules/
+*.log
+# local-only / previous Firebase attempt
+functions/
+firebase.json
+.firebaserc
+firestore.rules
+firestore.indexes.json
+.firebase/
+server.js
+public/art/
