@@ -277,11 +277,31 @@
   .card .spec{margin:-3px 0 6px}
   .resetlink{background:none;border:0;color:var(--mute);font:inherit;font-size:.74rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:10px}
   .resetlink:hover{color:var(--gold2)}
+  .modes{display:flex;justify-content:center;gap:8px;margin:-6px 0 16px}
+  .mode{font:inherit;font-size:.85rem;font-weight:700;letter-spacing:.04em;cursor:pointer;color:var(--mute);background:rgba(12,14,19,.9);border:1px solid #3a3e4c;border-radius:99px;padding:8px 20px}
+  .mode:hover{color:var(--text);border-color:var(--gold)}
+  .mode.on{color:#2a1f05;background:linear-gradient(180deg,var(--gold2),var(--gold));border-color:transparent}
+  .dnote{display:inline-block;max-width:520px;padding:14px 18px;border-radius:14px;background:rgba(12,14,19,.92);border:1px solid #3a3e4c;color:var(--text);line-height:1.5}
+  .dnote button{font:inherit;font-weight:700;cursor:pointer;margin:10px 6px 0;padding:8px 18px;border-radius:10px;color:var(--gold2);background:rgba(27,30,37,.95);border:1px solid #4a4f60}
+  .dailybox{max-width:440px;text-align:center}
+  .dailybox h2{margin:4px 0 2px}
+  .dsc{font-family:Cinzel,serif;font-weight:900;font-size:3.2rem;line-height:1.05;color:var(--gold2)}
+  .dpts{color:var(--mute);margin-bottom:10px}
+  .dgrid{font-size:1.7rem;line-height:1.35;letter-spacing:.08em;margin:10px 0 12px;user-select:none}
+  .dstat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 14px}
+  .dstat div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+  .dstat b{display:block;color:var(--text);font-size:1.15rem;letter-spacing:0}
+  .dbtns{display:grid;gap:8px}
+  .dbtns button{font:inherit;font-weight:700;cursor:pointer;border-radius:12px;padding:12px;border:1px solid #4a4f60;background:rgba(27,30,37,.95);color:var(--text)}
+  .dbtns button.primary{border:0;color:#2a1f05;background:linear-gradient(180deg,var(--gold2),var(--gold))}
+  .dnext{margin-top:12px;color:var(--mute);font-size:.82rem}
+  .dnext b{color:var(--gold2);font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
 <div class="mbg"><div class="half l" id="bgL"><i></i><i></i><i></i></div><div class="half r" id="bgR"><i></i><i></i><i></i></div><div class="tint l"></div><div class="tint r"></div></div>
 <div class="overlay" id="statsOv"><div class="modal wide" id="statsBox"></div></div>
+<div class="overlay" id="dailyOv"><div class="modal dailybox" id="dailyBox"></div></div>
 <canvas id="confetti"></canvas>
 <div id="pop"></div>
 <div class="wrap">
@@ -290,12 +310,16 @@
     <h1>Guess the Winner</h1>
     <div class="sub">Real recent 3v3 matches from top Asia players. Read the classes, pick the winning team.</div>
   </header>
+  <div class="modes">
+    <button class="mode on" id="modeEndless">∞ Endless</button>
+    <button class="mode" id="modeDaily">📅 Daily</button>
+  </div>
 
   <div class="stats">
     <div class="stat"><b id="score">0</b><span>Score</span></div>
     <div class="stat"><b id="acc">–</b><span>Accuracy</span></div>
     <div class="stat" id="streakStat"><b><span id="streak" class="n">0</span> <em id="mult" class="mult">x1</em></b><span>Streak</span></div>
-    <div class="stat"><b id="best">0</b><span>Best score</span></div>
+    <div class="stat"><b id="best">0</b><span id="bestLbl">Best score</span></div>
   </div>
   <div class="ctrl">
     <button class="ghost" id="hintBtn">💡 Hint <small>(shows all names · halves points)</small></button>
@@ -339,6 +363,7 @@ const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } cat
 let prof = load('aosq2', { best: 0, seen: [], muted: false, game: null });
 let cur = null, answered = true, picked = null, hinted = false;
 let g = { score: 0, streak: 0, bestStreak: 0, right: 0, total: 0, active: false };
+let mode = 'endless', D = null, DAILY = null;   // D = today's Daily progress, DAILY = today's 15 matches
 let timerId = null, deadline = 0, lastResult = null;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -403,7 +428,15 @@ const Api = {
     return { correct: pick === winner, winner, seconds: m.s, teamA: (flip ? m.b : m.a).map(fullP), teamB: (flip ? m.a : m.b).map(fullP) };
   },
 };
-const mult = () => 1 + Math.min(4, Math.floor(g.streak / 2));
+const mult = () => 1 + Math.min(4, Math.floor(((mode === 'daily' && D) ? D : g).streak / 2));
+// Daily matches are built from the normal data (see loadDaily); the order and the A/B side are fixed for everybody.
+Api.dailyQuiz = (i) => {
+  const m = DAILY.matches[i];
+  const flip = m.f === 1;
+  const id = 'd' + DAILY.id + '-' + i;
+  byId.set(id, { m, flip });
+  return { id, seenId: id, date: m.t, teamA: (flip ? m.b : m.a).map(pubP), teamB: (flip ? m.a : m.b).map(pubP) };
+};
 
 // ---------- sound ----------
 let actx;
@@ -429,13 +462,16 @@ const sfx = {
 
 // ---------- HUD ----------
 function renderHud() {
-  $('score').textContent = g.score;
-  $('acc').textContent = g.total ? Math.round(g.right / g.total * 100) + '%' : '–';
-  $('streak').textContent = g.streak;
+  const daily = mode === 'daily' && D;
+  const v = daily ? D : g;
+  $('score').textContent = v.score;
+  $('acc').textContent = daily ? (D.answers.length ? D.right + '/' + D.answers.length : '–') : (v.total ? Math.round(v.right / v.total * 100) + '%' : '–');
+  $('streak').textContent = v.streak;
   $('mult').textContent = 'x' + mult();
   $('mult').style.display = mult() > 1 ? 'inline' : 'none';
-  $('streakStat').classList.toggle('hot', g.streak >= 3);
-  $('best').textContent = Math.max(prof.best, g.score);
+  $('streakStat').classList.toggle('hot', v.streak >= 3);
+  $('bestLbl').textContent = daily ? 'Round' : 'Best score';
+  $('best').textContent = daily ? (answered ? Math.max(1, D.answers.length) : Math.min(D.answers.length + 1, dailyN())) + '/' + dailyN() : Math.max(prof.best, g.score);
   $('muteBtn').textContent = prof.muted ? '🔇' : '🔊';
 }
 function ago(iso) {
@@ -498,7 +534,116 @@ function startGame() {
   renderHud(); next();
 }
 
+// ---------- Daily challenge ----------
+const MYT_MS = 8 * 3600e3;                                   // the daily day runs on Malaysia time (UTC+8)
+const dayIdNow = () => new Date(Date.now() + MYT_MS).toISOString().slice(0, 10);
+const nz = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : 0);
+const dailyN = () => (DAILY ? DAILY.matches.length : 15);
+// Builds today's Daily from the normal match data (no separate file): 15 matches picked by a hash of (today + match),
+// taken from the 3 FULL days before today (Malaysia time) so the list does not change while the day goes on.
+const hash32 = (str) => { let x = 2166136261; for (let i = 0; i < str.length; i++) { x ^= str.charCodeAt(i); x = Math.imul(x, 16777619); } return x >>> 0; };
+async function loadDaily() {
+  if (!DATA) await loadData();
+  const id = dayIdNow();
+  if (DAILY && DAILY.id === id) return;
+  const dayStart = Date.parse(id + 'T00:00:00Z') - MYT_MS;           // today 00:00 Malaysia time, in UTC ms
+  const keyOf = (m) => m.t + '|' + m.s + '|' + m.a[0].n + '|' + m.b[0].n;
+  let pool = DATA.matches.filter((m) => { const t = new Date(m.t).getTime(); return t >= dayStart - 3 * 864e5 && t < dayStart; });
+  if (pool.length < 15) pool = DATA.matches.slice();                  // too few older matches: use the normal data as is
+  if (pool.length < 3) throw new Error('not enough matches');
+  const ranked = pool.map((m) => ({ m, h: hash32(id + '|' + keyOf(m)) }))
+    .sort((x, y) => x.h - y.h || (keyOf(x.m) < keyOf(y.m) ? -1 : 1)).slice(0, 15);
+  DAILY = { id, number: Math.floor((dayStart - Date.parse('2026-11-21T16:00:00Z')) / 864e5) + 1, matches: ranked.map(({ m, h }) => ({ ...m, f: h & 1 })) };
+}
+const dailyDone = () => !!(DAILY && prof.daily && prof.daily.id === DAILY.id && Array.isArray(prof.daily.answers) && prof.daily.answers.length >= dailyN());
+function updateModeUI() {
+  $('modeEndless').classList.toggle('on', mode === 'endless');
+  $('modeDaily').classList.toggle('on', mode === 'daily');
+  $('modeDaily').textContent = '📅 Daily' + (DAILY ? ' #' + DAILY.number : '') + (dailyDone() ? ' ✓' : '');
+  $('resetBtn').style.display = mode === 'daily' ? 'none' : '';
+}
+function idleArena(html) {
+  clearInterval(timerId); answered = true; cur = null;
+  $('pA').innerHTML = $('pB').innerHTML = '';
+  $('arena').classList.remove('revealed', 'hinted');
+  for (const s of ['A', 'B']) { $('t' + s).className = 'team ' + s; $('picked' + s).style.display = 'none'; }
+  $('bA').disabled = $('bB').disabled = $('hintBtn').disabled = true;
+  $('actions').style.display = ''; $('next').style.display = 'none'; $('statsBtn').style.display = 'none';
+  $('timerNum').textContent = '–'; $('timerBar').style.transform = 'scaleX(0)';
+  $('result').innerHTML = html || '';
+}
+async function startDaily() {
+  mode = 'daily'; clearInterval(timerId); updateModeUI();
+  try { if (!DAILY || DAILY.id !== dayIdNow()) await loadDaily(); }
+  catch { D = null; renderHud(); idleArena('<div class="dnote">Could not load today\'s Daily.<br>Please try again in a little while.<br><button id="retryDaily">Retry</button></div>'); $('retryDaily').onclick = startDaily; return; }
+  updateModeUI();
+  if (DAILY.id !== dayIdNow()) {
+    D = null; renderHud();
+    idleArena('<div class="dnote">Today\'s Daily is not ready yet.<br>It is created shortly after midnight Malaysia time (UTC+8). Try again in a few minutes.<br><button id="retryDaily">Retry</button></div>');
+    $('retryDaily').onclick = startDaily; return;
+  }
+  const sv = prof.daily && prof.daily.id === DAILY.id ? prof.daily : {};
+  const ans = Array.isArray(sv.answers) ? sv.answers.filter((a) => a === 'c' || a === 'w' || a === 't').slice(0, dailyN()) : [];
+  D = { score: nz(sv.score), right: ans.filter((a) => a === 'c').length, streak: nz(sv.streak), bestStreak: nz(sv.bestStreak), answers: ans, total: ans.length, active: true };
+  renderHud(); next();
+}
+function switchMode(m) {
+  if (m === mode) return;
+  clearInterval(timerId); closeDaily();
+  if (m === 'daily') startDaily(); else { mode = 'endless'; updateModeUI(); startGame(); }
+}
+function finishDaily() {   // count the day once for the day-streak
+  const st = prof.dstats || { streak: 0, lastId: '', played: 0, bestStreak: 0 };
+  if (st.lastId === DAILY.id) return;
+  const yest = new Date(Date.parse(DAILY.id + 'T00:00:00Z') - 864e5).toISOString().slice(0, 10);
+  st.streak = st.lastId === yest ? st.streak + 1 : 1;
+  st.lastId = DAILY.id; st.played = (st.played || 0) + 1; st.bestStreak = Math.max(st.bestStreak || 0, st.streak);
+  prof.dstats = st;
+}
+function dailyShareText() {
+  const p = prof.daily, N = dailyN(), right = p.answers.filter((a) => a === 'c').length;
+  const em = p.answers.map((a) => (a === 'c' ? '🟩' : a === 'w' ? '🟥' : '⬛'));
+  const rows = []; for (let i = 0; i < em.length; i += 5) rows.push(em.slice(i, i + 5).join(''));
+  return 'BDO AOS Daily #' + DAILY.number + '  ' + right + '/' + N + '  ·  ' + p.score + ' pts\n' + rows.join('\n') + '\n' + location.origin + location.pathname;
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch {} ta.remove(); return ok;
+  }
+}
+let dailyTick = null;
+function showDailySummary() {
+  if (!DAILY || !prof.daily) return;
+  const p = prof.daily, N = dailyN(), right = p.answers.filter((a) => a === 'c').length;
+  const em = p.answers.map((a) => (a === 'c' ? '🟩' : a === 'w' ? '🟥' : '⬛'));
+  const rows = []; for (let i = 0; i < em.length; i += 5) rows.push(em.slice(i, i + 5).join(''));
+  const st = prof.dstats || { streak: 0, bestStreak: 0, played: 0 };
+  $('dailyBox').innerHTML =
+    '<div class="eyebrow">Daily challenge</div><h2>Daily #' + DAILY.number + '</h2>' +
+    '<div class="dsc">' + right + '/' + N + '</div><div class="dpts">' + num(p.score) + ' points</div>' +
+    '<div class="dgrid">' + rows.join('<br>') + '</div>' +
+    '<div class="dstat"><div><b>' + (st.streak || 0) + '</b>day streak</div><div><b>' + (st.bestStreak || 0) + '</b>best streak</div><div><b>' + (st.played || 0) + '</b>days played</div></div>' +
+    '<div class="dbtns"><button class="primary" id="dShare">📋 Copy result to share</button><button id="dEndless">∞ Play endless mode</button><button id="dClose">Close</button></div>' +
+    '<div class="dnext">Next Daily in <b id="dLeft">--:--:--</b></div>';
+  $('dailyOv').classList.add('on'); document.body.classList.add('lock');
+  $('dShare').onclick = async () => { const ok = await copyText(dailyShareText()); $('dShare').textContent = ok ? '✅ Copied! Paste it in Discord' : 'Could not copy — select & copy manually'; };
+  $('dEndless').onclick = () => switchMode('endless');
+  $('dClose').onclick = closeDaily;
+  const tick = () => {
+    const next = (Math.floor((Date.now() + MYT_MS) / 864e5) + 1) * 864e5 - MYT_MS, s = Math.max(0, Math.floor((next - Date.now()) / 1000));
+    const el = $('dLeft'); if (el) el.textContent = [Math.floor(s / 3600), Math.floor(s % 3600 / 60), s % 60].map((x) => String(x).padStart(2, '0')).join(':');
+  };
+  clearInterval(dailyTick); tick(); dailyTick = setInterval(tick, 1000);
+}
+function closeDaily() { clearInterval(dailyTick); $('dailyOv').classList.remove('on'); document.body.classList.remove('lock'); }
+
 async function next() {
+  if (mode === 'daily' && D && D.answers.length >= dailyN()) {      // all rounds played: show the result
+    idleArena('<div class="dnote">✅ Daily #' + DAILY.number + ' complete — come back after midnight (Malaysia time) for the next one.<br><button id="viewDaily">View result</button></div>');
+    $('viewDaily').onclick = showDailySummary; renderHud(); showDailySummary(); return;
+  }
   answered = true; picked = null; hinted = false;
   clearInterval(timerId);
   $('result').innerHTML = '';
@@ -510,10 +655,11 @@ async function next() {
   $('bA').disabled = $('bB').disabled = true;
   $('pA').innerHTML = $('pB').innerHTML = skeletons;
   let q;
-  try { if (!DATA) await loadData(); q = Api.quiz(prof.seen.slice(-700)); }
+  try { if (mode === 'daily') q = Api.dailyQuiz(D.answers.length); else { if (!DATA) await loadData(); q = Api.quiz(prof.seen.slice(-700)); } }
   catch { q = { error: 'Could not load match data.' }; }
   if (q.error) { $('result').innerHTML = `<div class="small" style="color:var(--mute)">${esc(q.error)}</div>`; setTimeout(next, 5000); return; }
   cur = q; answered = false;
+  if (mode === 'daily') renderHud();   // refresh the round counter
   $('pA').innerHTML = cards(q.teamA, false, null, true); $('pB').innerHTML = cards(q.teamB, false, null, true);
   setBg(q.teamA, q.teamB);
   $('bA').disabled = $('bB').disabled = false; $('hintBtn').disabled = false;
@@ -536,22 +682,30 @@ async function useHint() {
 }
 
 async function guess(pick) {
-  if (answered || !cur || !g.active) return;
+  const s = (mode === 'daily' && D) ? D : g;
+  if (answered || !cur || !s.active) return;
   answered = true; picked = pick; clearInterval(timerId);
   const left = timeLeft();
   $('bA').disabled = $('bB').disabled = true; $('hintBtn').disabled = true;
   $('actions').style.display = 'none';
   const r = Api.guess(cur.id, pick);
-  if (r.error) { g.active = true; return next(); } // match was removed from the server meanwhile: just load another
-  g.total++; prof.seen.push(cur.seenId); if (prof.seen.length > 700) prof.seen = prof.seen.slice(-700);
+  if (r.error) { s.active = true; return next(); } // match was removed from the server meanwhile: just load another
+  s.total++;
+  if (mode === 'endless') { prof.seen.push(cur.seenId); if (prof.seen.length > 700) prof.seen = prof.seen.slice(-700); }
 
   let gained = 0, m = mult();
   if (r.correct) {
     gained = Math.round((100 + left / ROUND_SECONDS * 50) * m * (hinted ? .5 : 1));
-    g.score += gained; g.right++; g.streak++; g.bestStreak = Math.max(g.bestStreak, g.streak);
-  } else { g.streak = 0; }
-  if (g.score > prof.best) prof.best = g.score;
-  prof.game = { score: g.score, streak: g.streak, bestStreak: g.bestStreak, right: g.right, total: g.total };
+    s.score += gained; s.right++; s.streak++; s.bestStreak = Math.max(s.bestStreak, s.streak);
+  } else { s.streak = 0; }
+  if (mode === 'daily') {
+    D.answers.push(r.correct ? 'c' : pick === 'T' ? 't' : 'w');
+    prof.daily = { id: DAILY.id, answers: D.answers, score: D.score, streak: D.streak, bestStreak: D.bestStreak };
+    if (D.answers.length >= dailyN()) { finishDaily(); updateModeUI(); }
+  } else {
+    if (g.score > prof.best) prof.best = g.score;
+    prof.game = { score: g.score, streak: g.streak, bestStreak: g.bestStreak, right: g.right, total: g.total };
+  }
   save('aosq2', prof); renderHud();
 
   lastResult = { r, date: cur.date };
@@ -579,6 +733,7 @@ async function guess(pick) {
   if (r.correct) { sfx.win(); flash('#3ecf8e'); floatText('+' + gained, 'g', anchor); confetti(); }
   else { sfx.lose(); flash('#ef5b5b'); floatText(pick === 'T' ? 'Too slow!' : 'Miss', 'r', anchor); $('arena').classList.remove('shake'); void $('arena').offsetWidth; $('arena').classList.add('shake'); }
 
+  $('next').innerHTML = (mode === 'daily' && D.answers.length >= dailyN()) ? 'See results →' : 'Next match <kbd>Enter</kbd>';
   $('next').style.display = 'block'; $('next').onclick = next;
   $('next').focus({ preventScroll: true });
 }
@@ -654,6 +809,7 @@ function confetti() {
 $('bA').onclick = () => guess('A'); $('bB').onclick = () => guess('B');
 $('hintBtn').onclick = useHint; $('statsBtn').onclick = showStats;
 $('statsOv').onclick = (e) => { if (e.target.id === 'statsOv') closeStats(); };
+$('modeEndless').onclick = () => switchMode('endless'); $('modeDaily').onclick = () => switchMode('daily');
 $('resetBtn').onclick = () => {
   if (!confirm('Reset your score, streak and accuracy to 0? Your best score is kept.')) return;
   prof.game = null; save('aosq2', prof);
@@ -663,6 +819,7 @@ $('resetBtn').onclick = () => {
 $('muteBtn').onclick = () => { prof.muted = !prof.muted; save('aosq2', prof); renderHud(); };
 document.querySelectorAll('.team').forEach((t) => t.onclick = () => guess(t.dataset.pick));
 addEventListener('keydown', (e) => {
+  if ($('dailyOv').classList.contains('on')) { if (e.key === 'Escape') closeDaily(); return; }
   if ($('statsOv').classList.contains('on')) { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); closeStats(); } return; }
     if (e.key === '1' || e.key === 'ArrowLeft') guess('A');
   else if (e.key === '2' || e.key === 'ArrowRight') guess('B');
@@ -686,6 +843,7 @@ function status() {
 }
 setInterval(status, 60000); loadData().then(status).catch(() => { $('status').textContent = 'offline'; });
 startGame();
+loadDaily().then(updateModeUI).catch(() => {});   // so the Daily button can show today's number and a tick when finished
 </script>
 </body>
 </html>
