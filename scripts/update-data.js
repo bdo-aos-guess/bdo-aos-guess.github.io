@@ -37,7 +37,7 @@ async function getJSON(url, tries = 3) {
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0); // only real numbers are ever written
 const slim = (p) => ({
   n: String(p.user_nickname).slice(0, 40), c: CLASSES[p.class_type] || `Class ${p.class_type}`,
-  k: num(p.kill_count), d: num(p.death_count), r: num(p.rank_rating), k2: num(p.current_ranking),
+  b: num(p.skill_branch_type), k: num(p.kill_count), d: num(p.death_count), r: num(p.rank_rating), k2: num(p.current_ranking),
   dd: num(p.damage_done), dt: num(p.damage_taken), rc: num(p.recovery), cc: num(p.cc_applied_count), pd: num(p.vary_rank_rating),
 });
 const rnd = () => Math.random().toString(36).slice(2, 6).padEnd(4, 'x');

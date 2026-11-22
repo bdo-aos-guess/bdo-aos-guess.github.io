@@ -270,6 +270,9 @@
   .card .info{min-width:0}
   .cls,.name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal}
   .name.mask{letter-spacing:.25em;color:#aab;opacity:.85}
+  .spec{display:flex;align-items:center;gap:4px;font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#cfd3df;margin:1px 0 2px;text-shadow:0 1px 4px #000;white-space:nowrap}
+  .spec img{width:10px;height:13px;flex:none}
+  .pcell .spec{font-size:.58rem;margin:2px 0 0;color:#aab}
 </style>
 </head>
 <body>
@@ -347,8 +350,12 @@ async function loadData() {
 }
 const N = (v) => (v == null ? null : (Number.isFinite(Number(v)) ? Number(v) : 0));
 const winnerIsA = (m) => atob(m.w)[4] === "1";
-const pubP = (p) => ({ name: String(p.n), cls: String(p.c) });
-const fullP = (p) => ({ name: String(p.n), cls: String(p.c), kills: N(p.k), deaths: N(p.d), rating: N(p.r), rank: N(p.k2), dd: N(p.dd), dt: N(p.dt), rc: N(p.rc), cc: N(p.cc), pd: N(p.pd) });
+// Spec label: six classes have "Ascension"; everyone else is Awakening (1) or Succession (2)
+const ASC = new Set(['Wukong', 'Scholar', 'Shai', 'Archer', 'Seraph', 'Deadeye']);
+const specOf = (cls, b) => (ASC.has(cls) ? 'Ascension' : b === 1 ? 'Awakening' : b === 2 ? 'Succession' : null);
+const specHtml = (sp) => (sp ? '<div class="spec">' + (sp === 'Ascension' ? '' : '<img src="spec/' + sp.toLowerCase() + '.png" alt="">') + sp + '</div>' : '');
+const pubP = (p) => ({ name: String(p.n), cls: String(p.c), spec: specOf(String(p.c), p.b) });
+const fullP = (p) => ({ name: String(p.n), cls: String(p.c), spec: specOf(String(p.c), p.b), kills: N(p.k), deaths: N(p.d), rating: N(p.r), rank: N(p.k2), dd: N(p.dd), dt: N(p.dt), rc: N(p.rc), cc: N(p.cc), pd: N(p.pd) });
 // better randomness than Math.random (uses the browser's secure generator when available)
 const randInt = (n) => {
   try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; } catch { return Math.floor(Math.random() * n); }
@@ -438,7 +445,7 @@ function cards(list, full, mvpName, hideNames) {
     <div class="card" style="background-image:url('${img(p.cls)}')">
       ${full && p.name === mvpName ? '<div class="mvp">★ MVP</div>' : ''}
       <div class="info">
-        <div class="cls">${esc(p.cls)}</div>
+        <div class="cls">${esc(p.cls)}</div>${specHtml(p.spec)}
         ${hideNames && i > 1 ? '<div class="name mask">? ? ?</div>' : '<div class="name">' + esc(p.name) + '</div>'}
         <div class="hint"></div>
         ${full ? `<div class="det"><span class="kd">${p.kills} / ${p.deaths}</span><br><b>${p.rating}</b> rating<br>Rank #${p.rank}</div>` : ''}
@@ -588,7 +595,7 @@ function showStats() {
   const kdr = (p) => (p.deaths ? (p.kills / p.deaths).toFixed(1) : p.kills.toFixed(1));
   const row = (p) => '<tr class="' + (p === mvp ? 'mvprow' : '') + '">' +
     '<td><div class="pcell"><div class="av" style="background-image:url(' + img(p.cls) + ')">' + (p === mvp ? '<span class="mv">⭐</span>' : '') + '</div>' +
-    '<div><b title="' + esc(p.name) + '">' + esc(p.name) + '</b><span>' + esc(p.cls) + '</span></div></div></td>' +
+    '<div><b title="' + esc(p.name) + '">' + esc(p.name) + '</b><span>' + esc(p.cls) + '</span>' + specHtml(p.spec) + '</div></div></td>' +
     '<td><span class="kd">' + p.kills + ' / ' + p.deaths + '<small>' + kdr(p) + ' KDA</small></span></td>' +
     '<td class="' + (p.cc != null && p.cc === bk.cc && bk.cc > 0 ? 'top' : '') + '">' + num(p.cc) + '</td>' +
     bar(p, 'dd') + bar(p, 'dt') + bar(p, 'rc') +
