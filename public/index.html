@@ -273,6 +273,16 @@
   .spec{display:flex;align-items:center;gap:4px;font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#cfd3df;margin:1px 0 2px;text-shadow:0 1px 4px #000;white-space:nowrap}
   .spec img{width:10px;height:13px;flex:none}
   .pcell .spec{font-size:.58rem;margin:2px 0 0;color:#aab}
+  /* balanced card text */
+  .card .info{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 10px 12px}
+  .card .cls{line-height:1.1}
+  .card .name{line-height:1.2;margin:0}
+  .spec{display:inline-flex;align-items:center;gap:5px;margin:0;padding:3px 9px 3px 7px;border-radius:99px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);font-size:.58rem;font-weight:700;letter-spacing:.1em;line-height:1;color:#ecebf3;text-shadow:none}
+  .spec img{width:10px;height:13px;object-fit:contain;display:block}
+  .pcell .spec{padding:2px 8px 2px 6px;margin-top:3px;background:rgba(255,255,255,.08);color:#c9cbd6}
+  .card .hint,.card .det{margin:0}
+  .resetlink{background:none;border:0;color:var(--mute);font:inherit;font-size:.74rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:10px}
+  .resetlink:hover{color:var(--gold2)}
 </style>
 </head>
 <body>
@@ -319,7 +329,7 @@
   </div>
 
   <div class="foot">
-    <span class="live"></span><span id="status">connecting…</span>
+    <span class="live"></span><span id="status">connecting…</span><button class="resetlink" id="resetBtn" title="Start your score from 0 again">Reset score</button>
   </div>
 </div>
 
@@ -332,7 +342,7 @@ const rankFor = (s) => RANKS.filter((r) => s >= r[0]).pop()[1];
 
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
-let prof = load('aosq2', { best: 0, seen: [], muted: false });
+let prof = load('aosq2', { best: 0, seen: [], muted: false, game: null });
 let cur = null, answered = true, picked = null, hinted = false;
 let g = { score: 0, streak: 0, bestStreak: 0, right: 0, total: 0, active: false };
 let timerId = null, deadline = 0, lastResult = null;
@@ -487,8 +497,11 @@ const timeLeft = () => Math.max(0, (deadline - Date.now()) / 1000);
 
 // ---------- flow ----------
 function startGame() {
-  g = { score: 0, streak: 0, bestStreak: 0, right: 0, total: 0, active: true };
-    renderHud(); next();
+  // continue where the player left off (saved in this browser) instead of starting from 0
+  const sv = prof.game || {};
+  const n0 = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : 0);
+  g = { score: n0(sv.score), streak: n0(sv.streak), bestStreak: n0(sv.bestStreak), right: n0(sv.right), total: n0(sv.total), active: true };
+  renderHud(); next();
 }
 
 async function next() {
@@ -544,6 +557,7 @@ async function guess(pick) {
     g.score += gained; g.right++; g.streak++; g.bestStreak = Math.max(g.bestStreak, g.streak);
   } else { g.streak = 0; }
   if (g.score > prof.best) prof.best = g.score;
+  prof.game = { score: g.score, streak: g.streak, bestStreak: g.bestStreak, right: g.right, total: g.total };
   save('aosq2', prof); renderHud();
 
   lastResult = { r, date: cur.date };
@@ -646,6 +660,12 @@ function confetti() {
 $('bA').onclick = () => guess('A'); $('bB').onclick = () => guess('B');
 $('hintBtn').onclick = useHint; $('statsBtn').onclick = showStats;
 $('statsOv').onclick = (e) => { if (e.target.id === 'statsOv') closeStats(); };
+$('resetBtn').onclick = () => {
+  if (!confirm('Reset your score, streak and accuracy to 0? Your best score is kept.')) return;
+  prof.game = null; save('aosq2', prof);
+  g = { score: 0, streak: 0, bestStreak: 0, right: 0, total: 0, active: true };
+  renderHud();
+};
 $('muteBtn').onclick = () => { prof.muted = !prof.muted; save('aosq2', prof); renderHud(); };
 document.querySelectorAll('.team').forEach((t) => t.onclick = () => guess(t.dataset.pick));
 addEventListener('keydown', (e) => {
