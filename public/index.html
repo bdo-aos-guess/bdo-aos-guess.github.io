@@ -439,7 +439,7 @@ function cards(list, full, mvpName, hideNames) {
       ${full && p.name === mvpName ? '<div class="mvp">★ MVP</div>' : ''}
       <div class="info">
         <div class="cls">${esc(p.cls)}</div>
-        ${hideNames && i > 0 ? '<div class="name mask">? ? ?</div>' : '<div class="name">' + esc(p.name) + '</div>'}
+        ${hideNames && i > 1 ? '<div class="name mask">? ? ?</div>' : '<div class="name">' + esc(p.name) + '</div>'}
         <div class="hint"></div>
         ${full ? `<div class="det"><span class="kd">${p.kills} / ${p.deaths}</span><br><b>${p.rating}</b> rating<br>Rank #${p.rank}</div>` : ''}
       </div>
