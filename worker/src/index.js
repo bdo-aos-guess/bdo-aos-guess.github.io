@@ -80,7 +80,7 @@ async function readTop(env, scope, day) {
          FROM daily_scores GROUP BY id ORDER BY points DESC, correct DESC, last ASC LIMIT 20`).all());
   } else {
     ({ results: rows } = await env.DB.prepare(
-      `SELECT id, name, avatar, correct, points, rounds FROM daily_scores WHERE day = ?1
+      `SELECT id, name, avatar, correct, points, rounds, answers FROM daily_scores WHERE day = ?1
          ORDER BY correct DESC, points DESC, updated ASC LIMIT 20`).bind(day).all());
   }
   mem.top.set(key, { at: Date.now(), rows });
