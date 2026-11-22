@@ -360,6 +360,9 @@
   .gate .lbempty{border:0;padding:6px 0 2px}
   .gatecancel{display:block;margin:12px auto 0;font:inherit;font-size:.8rem;color:var(--mute);background:none;border:0;text-decoration:underline;cursor:pointer}
   .lbplay{width:100%;font:inherit;font-weight:800;cursor:pointer;border:0;border-radius:12px;padding:13px;color:#2a1f05;background:linear-gradient(180deg,var(--gold2),var(--gold))}
+  .hardtag{display:none;width:max-content;max-width:100%;margin:-6px auto 12px;padding:8px 18px;border-radius:99px;font-weight:800;font-size:.88rem;letter-spacing:.04em;color:#fff;background:linear-gradient(180deg,#ff8a4c,#d9461f);box-shadow:0 8px 22px -8px rgba(255,110,50,.8);animation:pop .5s cubic-bezier(.2,1.6,.4,1) both}
+  .hardtag.on{display:block}
+  .name.rankline{color:var(--gold2);letter-spacing:.04em}
 </style>
 </head>
 <body>
@@ -384,7 +387,7 @@
       </button>
       <button class="mode" id="modeDaily" role="tab">
         <span class="mi">📅</span>
-        <span class="mt"><b id="dTitle">Daily</b><small id="dSub">15 matches</small></span>
+        <span class="mt"><b id="dTitle">Daily</b><small id="dSub">12 matches</small></span>
         <i class="dbadge" id="dBadge">NEW</i>
       </button>
     </div>
@@ -402,6 +405,7 @@
     <button class="ghost" id="muteBtn" title="Sound">🔊</button>
   </div>
 
+  <div class="hardtag" id="hardTag">🔥 Harder question — no names, only ranks</div>
   <div class="arena" id="arena">
     <div class="team A pickable" id="tA" data-pick="A"><div class="badge picked" id="pickedA">YOUR PICK</div><div class="badge vic">👑 VICTORY</div><div class="badge def">DEFEAT</div>
       <div class="label"><i></i>Team A</div><div class="cards" id="pA"></div><div class="tsum" id="sA"></div></div>
@@ -436,11 +440,11 @@ const rankFor = (s) => RANKS.filter((r) => s >= r[0]).pop()[1];
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 let prof = load('aosq2', { best: 0, seen: [], muted: false, game: null });
-const DAILY_RESET = 2;   // raise this number to let EVERYBODY play the current Daily again (clears saved Daily progress only)
+const DAILY_RESET = 3;   // raise this number to let EVERYBODY play the current Daily again (clears saved Daily progress only)
 if (prof.daily && prof.daily.v !== DAILY_RESET) { prof.daily = null; prof.dres = null; prof.dpending = null; save('aosq2', prof); }
 let cur = null, answered = true, picked = null, hinted = false;
 let g = { score: 0, streak: 0, bestStreak: 0, right: 0, total: 0, active: false };
-let mode = 'endless', D = null, DAILY = null;   // D = today's Daily progress, DAILY = today's 15 matches
+let mode = 'endless', D = null, DAILY = null;   // D = today's Daily progress, DAILY = today's 12 matches
 let timerId = null, deadline = 0, lastResult = null;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -460,7 +464,7 @@ const winnerIsA = (m) => atob(m.w)[4] === "1";
 const ASC = new Set(['Wukong', 'Scholar', 'Shai', 'Archer', 'Seraph', 'Deadeye']);
 const specOf = (cls, b) => (ASC.has(cls) ? 'Ascension' : b === 1 ? 'Awakening' : b === 2 ? 'Succession' : null);
 const specHtml = (sp) => (sp ? '<div class="spec">' + (sp === 'Ascension' ? '' : '<img src="spec/' + sp.toLowerCase() + '.png" alt="">') + sp + '</div>' : '');
-const pubP = (p) => ({ name: String(p.n), cls: String(p.c), spec: specOf(String(p.c), p.b) });
+const pubP = (p) => ({ name: String(p.n), cls: String(p.c), spec: specOf(String(p.c), p.b), rank: N(p.k2) });
 const fullP = (p) => ({ name: String(p.n), cls: String(p.c), spec: specOf(String(p.c), p.b), kills: N(p.k), deaths: N(p.d), rating: N(p.r), rank: N(p.k2), dd: N(p.dd), dt: N(p.dt), rc: N(p.rc), cc: N(p.cc), pd: N(p.pd) });
 // better randomness than Math.random (uses the browser's secure generator when available)
 const randInt = (n) => {
@@ -548,7 +552,8 @@ function renderHud() {
   $('mult').style.display = mult() > 1 ? 'inline' : 'none';
   $('streakStat').classList.toggle('hot', v.streak >= 3);
   $('bestLbl').textContent = daily ? 'Round' : 'Best score';
-  $('best').textContent = daily ? (answered ? Math.max(1, D.answers.length) : Math.min(D.answers.length + 1, dailyN())) + '/' + dailyN() : Math.max(prof.best, g.score);
+  { const roundNo = daily ? (answered ? Math.max(1, D.answers.length) : Math.min(D.answers.length + 1, dailyN())) : 0;
+    $('best').textContent = daily ? roundNo + '/' + dailyN() + (roundNo > HARD_FROM ? ' 🔥' : '') : Math.max(prof.best, g.score); }
   $('muteBtn').textContent = prof.muted ? '🔇' : '🔊';
 }
 function ago(iso) {
@@ -557,13 +562,13 @@ function ago(iso) {
   if (m < 2880) return `${Math.round(m / 60)} h ago`;
   return `${Math.round(m / 1440)} days ago`;
 }
-function cards(list, full, mvpName, hideNames) {
+function cards(list, full, mvpName, hideNames, hard) {
   return list.map((p, i) => `
     <div class="card" style="background-image:url('${img(p.cls)}')">
       ${full && p.name === mvpName ? '<div class="mvp">★ MVP</div>' : ''}
       <div class="info">
         <div class="cls">${esc(p.cls)}</div>${specHtml(p.spec)}
-        ${hideNames && i > 1 ? '<div class="name mask">? ? ?</div>' : '<div class="name">' + esc(p.name) + '</div>'}
+        ${hard ? '<div class="name rankline">Rank #' + p.rank + '</div>' : hideNames && i > 1 ? '<div class="name mask">? ? ?</div>' : '<div class="name">' + esc(p.name) + '</div>'}
         <div class="hint"></div>
         ${full ? `<div class="det"><span class="kd">${p.kills} / ${p.deaths}</span><br><b>${p.rating}</b> rating<br>Rank #${p.rank}</div>` : ''}
       </div>
@@ -615,8 +620,9 @@ function startGame() {
 const MYT_MS = 8 * 3600e3;                                   // the daily day runs on Malaysia time (UTC+8)
 const dayIdNow = () => new Date(Date.now() + MYT_MS).toISOString().slice(0, 10);
 const nz = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : 0);
-const dailyN = () => (DAILY ? DAILY.matches.length : 15);
-// Builds today's Daily from the normal match data (no separate file): 15 matches picked by a hash of (today + match),
+const DAILY_LEN = 12, HARD_FROM = 10;   // 12 matches; questions 11 and 12 (index 10, 11) are the harder ones: ranks only, no names
+const dailyN = () => (DAILY ? DAILY.matches.length : DAILY_LEN);
+// Builds today's Daily from the normal match data (no separate file): 12 matches picked by a hash of (today + match),
 // taken from the 3 FULL days before today (Malaysia time) so the list does not change while the day goes on.
 const hash32 = (str) => { let x = 2166136261; for (let i = 0; i < str.length; i++) { x ^= str.charCodeAt(i); x = Math.imul(x, 16777619); } return x >>> 0; };
 async function loadDaily() {
@@ -626,10 +632,10 @@ async function loadDaily() {
   const dayStart = Date.parse(id + 'T00:00:00Z') - MYT_MS;           // today 00:00 Malaysia time, in UTC ms
   const keyOf = (m) => m.t + '|' + m.s + '|' + m.a[0].n + '|' + m.b[0].n;
   let pool = DATA.matches.filter((m) => { const t = new Date(m.t).getTime(); return t >= dayStart - 3 * 864e5 && t < dayStart; });
-  if (pool.length < 15) pool = DATA.matches.slice();                  // too few older matches: use the normal data as is
+  if (pool.length < DAILY_LEN) pool = DATA.matches.slice();                  // too few older matches: use the normal data as is
   if (pool.length < 3) throw new Error('not enough matches');
   const ranked = pool.map((m) => ({ m, h: hash32(id + '|' + keyOf(m)) }))
-    .sort((x, y) => x.h - y.h || (keyOf(x.m) < keyOf(y.m) ? -1 : 1)).slice(0, 15);
+    .sort((x, y) => x.h - y.h || (keyOf(x.m) < keyOf(y.m) ? -1 : 1)).slice(0, DAILY_LEN);
   DAILY = { id, number: Math.floor((dayStart - Date.parse('2026-11-21T16:00:00Z')) / 864e5) + 1, matches: ranked.map(({ m, h }) => ({ ...m, f: h & 1 })) };
 }
 const dailyDone = () => !!(DAILY && prof.daily && prof.daily.id === DAILY.id && Array.isArray(prof.daily.answers) && prof.daily.answers.length >= dailyN());
@@ -646,6 +652,7 @@ function updateModeUI() {
   $('resetBtn').style.display = mode === 'daily' ? 'none' : '';
 }
 function idleArena(html) {
+  $('hardTag').classList.remove('on');
   clearInterval(timerId); answered = true; cur = null;
   $('pA').innerHTML = $('pB').innerHTML = '';
   $('arena').classList.remove('revealed', 'hinted');
@@ -750,12 +757,14 @@ async function next() {
   $('bA').disabled = $('bB').disabled = true;
   $('pA').innerHTML = $('pB').innerHTML = skeletons;
   let q;
-  try { if (mode === 'daily') q = Api.dailyQuiz(D.answers.length); else { if (!DATA) await loadData(); q = Api.quiz(prof.seen.slice(-700)); } }
+  try { if (mode === 'daily') { q = Api.dailyQuiz(D.answers.length); q.hard = D.answers.length >= HARD_FROM; } else { if (!DATA) await loadData(); q = Api.quiz(prof.seen.slice(-700)); } }
   catch { q = { error: 'Could not load match data.' }; }
   if (q.error) { $('result').innerHTML = `<div class="small" style="color:var(--mute)">${esc(q.error)}</div>`; setTimeout(next, 5000); return; }
   cur = q; answered = false;
   if (mode === 'daily') renderHud();   // refresh the round counter
-  $('pA').innerHTML = cards(q.teamA, false, null, true); $('pB').innerHTML = cards(q.teamB, false, null, true);
+  $('pA').innerHTML = cards(q.teamA, false, null, true, q.hard); $('pB').innerHTML = cards(q.teamB, false, null, true, q.hard);
+  $('hardTag').classList.toggle('on', !!q.hard);
+  $('hintBtn').innerHTML = q.hard ? '💡 Hint <small>(shows ratings · halves points)</small>' : '💡 Hint <small>(shows all names · halves points)</small>';
   setBg(q.teamA, q.teamB);
   $('bA').disabled = $('bB').disabled = false; $('hintBtn').disabled = false;
   startTimer();
@@ -766,13 +775,14 @@ async function useHint() {
   hinted = true; $('hintBtn').disabled = true;
   const h = Api.hint(cur.id);
   if (h.error) return;
-  const fill = (el, arr) => el.querySelectorAll('.hint').forEach((d, i) => { d.textContent = `${arr[i].rating} pts · #${arr[i].rank}`; });
+  const hard = !!cur.hard;
+  const fill = (el, arr) => el.querySelectorAll('.hint').forEach((d, i) => { d.textContent = hard ? `${arr[i].rating} rating` : `${arr[i].rating} pts · #${arr[i].rank}`; });
   fill($('pA'), h.teamA); fill($('pB'), h.teamB);
   const reveal = (el, team) => el.querySelectorAll('.name.mask').forEach((d) => {
     const i = [...el.querySelectorAll('.card')].indexOf(d.closest('.card'));
     d.textContent = team[i].name; d.classList.remove('mask');
   });
-  reveal($('pA'), cur.teamA); reveal($('pB'), cur.teamB);
+  if (!hard) { reveal($('pA'), cur.teamA); reveal($('pB'), cur.teamB); }
   $('arena').classList.add('hinted');
 }
 
@@ -1001,7 +1011,7 @@ function closeLb() { $('lbOv').classList.remove('on'); document.body.classList.r
 function showLoginGate() {
   $('lbBox').innerHTML =
     '<div class="gate"><div class="lbtop"><div><div class="eyebrow">Daily challenge</div><h2>📅 Log in to play</h2></div><button class="lbclose" id="lbClose" aria-label="Close">×</button></div>' +
-    '<div class="lbempty">The Daily needs a Discord login.</div><ul><li>Everyone gets the same 15 matches each day.</li><li>One try per Discord account per day.</li><li>Your result goes on the leaderboard by itself, under your Discord name.</li></ul>' +
+    '<div class="lbempty">The Daily needs a Discord login.</div><ul><li>Everyone gets the same 12 matches each day. The last 2 are harder.</li><li>One try per Discord account per day.</li><li>Your result goes on the leaderboard by itself, under your Discord name.</li></ul>' +
     (lbReady() ? '<button class="dcbtn" id="lbLogin">' + DC_ICON + 'Log in with Discord</button>' : '<div class="lbnote">The login is being set up. Please come back soon!</div>') +
     '<div class="lbnote">We only read your Discord name and picture — never your password, messages or servers.</div>' +
     '<button class="gatecancel" id="gateCancel">Not now</button></div>';

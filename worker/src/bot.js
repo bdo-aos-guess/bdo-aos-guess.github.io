@@ -131,7 +131,7 @@ async function cmdDaily(i, env, h) {
   const lead = top[0] ? '\n👑 Leading: **' + md(top[0].name) + '** with ' + top[0].correct + '/' + top[0].rounds + ' (' + num(top[0].points) + ' pts)' : '';
   const embed = {
     author: { name: 'BDO AOS · Arena of Solare', icon_url: LOGO(env) }, title: '📅 Daily #' + dailyNumber(day), color: GOLD,
-    description: '15 matches — same for everyone, one try per Discord account.\n**' + num(n && n.n) + '** ' + ((n && n.n) === 1 ? 'player has' : 'players have') + ' finished today.' + lead + '\n\nNext Daily <t:' + nextReset() + ':R>',
+    description: '12 matches — same for everyone (the last 2 are harder), one try per Discord account.\n**' + num(n && n.n) + '** ' + ((n && n.n) === 1 ? 'player has' : 'players have') + ' finished today.' + lead + '\n\nNext Daily <t:' + nextReset() + ':R>',
     image: { url: BANNER(env) },
   };
   if (top[0]) embed.thumbnail = { url: avatar(top[0].id, top[0].avatar) };
@@ -165,7 +165,7 @@ export async function postDailyAnnouncement(env, h, deps = { fetch: (u, o) => fe
     embeds.push({ author: { name: 'BDO AOS · Arena of Solare', icon_url: LOGO(env) }, title: '🏆 Daily #' + dailyNumber(yesterday) + ' — final results', color: GOLD, image: { url: BANNER(env) } });
     embeds.push(...podiumEmbeds(rows, 'today'));
   }
-  embeds.push({ title: '📅 Daily #' + dailyNumber(today) + ' is ready!', color: GOLD, description: '15 new matches. One try per Discord account — good luck!' });
+  embeds.push({ title: '📅 Daily #' + dailyNumber(today) + ' is ready!', color: GOLD, description: '12 new matches — the last 2 are harder, with ranks only and no names. One try per Discord account — good luck!' });
   const res = await deps.fetch(hook, { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ username: 'BDO AOS Daily', embeds, components: [linkRow(env, 'Play now')], allowed_mentions: NO_PINGS }) });
   return { status: res.status };

@@ -15,6 +15,7 @@ const MYT_MS = 8 * 3600e3;                 // the Daily day runs on Malaysia tim
 const MAX_PER_ROUND = 750;                 // 150 base points x 5 (highest streak multiplier)
 const MIN_PER_CORRECT = 50;                // (100 base) x 0.5 (hint used) is the least a correct answer can give
 const TOP_CACHE_MS = 20_000;
+const DAILY_ROUNDS = 12;                  // a Daily is 12 matches; only the first 12 answers ever count
 
 const realFetch = (url, init) => fetch(url, init);   // calling the global fetch through an object would fail with "Illegal invocation"
 
@@ -131,11 +132,15 @@ export async function handle(request, env, deps = { fetch: realFetch }) {
       // ---- save a Daily result ----
       if (body.day !== day) return json({ error: 'day changed', day }, 409, cors.headers);     // the day rolled over while playing
       if (mine) return json({ ok: true, already: true, ...mine, rank: await rankOf(env, day, mine.correct, mine.points) }, 200, cors.headers);
-      const { answers, points } = body;
-      if (typeof answers !== 'string' || !/^[cwt]{5,15}$/.test(answers) || !Number.isInteger(points)) return json({ error: 'invalid result' }, 400, cors.headers);
-      const rounds = answers.length, correct = (answers.match(/c/g) || []).length;
-      const okPoints = correct === 0 ? points === 0 : points >= correct * MIN_PER_CORRECT && points <= correct * MAX_PER_ROUND;
-      if (!okPoints) return json({ error: 'invalid result' }, 400, cors.headers);
+      const { answers: sent, points: sentPoints } = body;
+      if (typeof sent !== 'string' || !new RegExp('^[cwt]{' + DAILY_ROUNDS + ',15}$').test(sent) || !Number.isInteger(sentPoints)) return json({ error: 'invalid result' }, 400, cors.headers);
+      const correctSent = (sent.match(/c/g) || []).length;
+      const okSent = correctSent === 0 ? sentPoints === 0 : sentPoints >= correctSent * MIN_PER_CORRECT && sentPoints <= correctSent * MAX_PER_ROUND;
+      if (!okSent) return json({ error: 'invalid result' }, 400, cors.headers);
+      // only the first DAILY_ROUNDS answers count (a page that is still open from the 15-match days may send more than 12):
+      // the points are scaled down in proportion to the correct answers that are kept
+      const answers = sent.slice(0, DAILY_ROUNDS), rounds = answers.length, correct = (answers.match(/c/g) || []).length;
+      const points = sent.length === DAILY_ROUNDS ? sentPoints : (correctSent ? Math.round(sentPoints * correct / correctSent) : 0);
 
       await env.DB.prepare(
         `INSERT OR IGNORE INTO daily_scores (day, id, name, avatar, correct, points, rounds, answers, updated)
