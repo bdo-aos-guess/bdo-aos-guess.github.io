@@ -436,6 +436,8 @@ const rankFor = (s) => RANKS.filter((r) => s >= r[0]).pop()[1];
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 let prof = load('aosq2', { best: 0, seen: [], muted: false, game: null });
+const DAILY_RESET = 2;   // raise this number to let EVERYBODY play the current Daily again (clears saved Daily progress only)
+if (prof.daily && prof.daily.v !== DAILY_RESET) { prof.daily = null; prof.dres = null; prof.dpending = null; save('aosq2', prof); }
 let cur = null, answered = true, picked = null, hinted = false;
 let g = { score: 0, streak: 0, bestStreak: 0, right: 0, total: 0, active: false };
 let mode = 'endless', D = null, DAILY = null;   // D = today's Daily progress, DAILY = today's 15 matches
@@ -670,7 +672,7 @@ async function startDaily() {
   if (sv.uid && me.user && sv.uid !== me.user.id) sv = {};  // another Discord account used this browser earlier: start fresh
   if (me.today && me.today.answers) {                       // already finished today (maybe on another device): show that result
     const arr = String(me.today.answers).split('');
-    if (!sv.answers || sv.answers.length < arr.length) sv = { id: DAILY.id, uid: me.user.id, answers: arr, score: me.today.points, streak: 0, bestStreak: 0 };
+    if (!sv.answers || sv.answers.length < arr.length) sv = { v: DAILY_RESET, id: DAILY.id, uid: me.user.id, answers: arr, score: me.today.points, streak: 0, bestStreak: 0 };
     prof.daily = sv; prof.dres = { id: DAILY.id, rank: me.today.rank, correct: me.today.correct, points: me.today.points }; finishDaily(); save('aosq2', prof);
   }
   const ans = Array.isArray(sv.answers) ? sv.answers.filter((a) => a === 'c' || a === 'w' || a === 't').slice(0, dailyN()) : [];
@@ -793,7 +795,7 @@ async function guess(pick) {
   } else { s.streak = 0; }
   if (mode === 'daily') {
     D.answers.push(r.correct ? 'c' : pick === 'T' ? 't' : 'w');
-    prof.daily = { id: DAILY.id, uid: (prof.duser && prof.duser.id) || null, answers: D.answers, score: D.score, streak: D.streak, bestStreak: D.bestStreak };
+    prof.daily = { v: DAILY_RESET, id: DAILY.id, uid: (prof.duser && prof.duser.id) || null, answers: D.answers, score: D.score, streak: D.streak, bestStreak: D.bestStreak };
     if (D.answers.length >= dailyN()) { finishDaily(); lbSubmitDaily().then(() => { if ($('dailyOv').classList.contains('on')) showDailySummary(); }); }
     updateModeUI();
   } else {
