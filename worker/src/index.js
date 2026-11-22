@@ -8,6 +8,8 @@
 // (GET /oauth2/@me): it must have been issued to OUR Discord app and carry the "identify" scope.
 // Names always come from Discord, never from the browser. Tokens are never stored.
 
+import { handleDiscord, postDailyAnnouncement } from './bot.js';
+
 const DISCORD_ME = 'https://discord.com/api/v10/oauth2/@me';
 const MYT_MS = 8 * 3600e3;                 // the Daily day runs on Malaysia time (UTC+8)
 const MAX_PER_ROUND = 750;                 // 150 base points x 5 (highest streak multiplier)
@@ -90,9 +92,13 @@ const rankOf = async (env, day, correct, points) => {
   return (r ? r.n : 0) + 1;
 };
 
+const botHelpers = { dayNow, readTop: (env, scope, day) => readTop(env, scope, day), rankOf: (env, day, c, p) => rankOf(env, day, c, p) };
+
 export async function handle(request, env, deps = { fetch }) {
-  const cors = corsFor(request, env);
   const url = new URL(request.url);
+  // Discord slash commands: signed by Discord, so no browser origin check here
+  if (url.pathname === '/discord' && request.method === 'POST') return handleDiscord(request, env, botHelpers);
+  const cors = corsFor(request, env);
   if (request.method === 'OPTIONS') return new Response(null, { status: cors.ok ? 204 : 403, headers: cors.headers });
   if (!cors.ok) return json({ error: 'origin not allowed' }, 403, cors.headers);
   if (tooMany(request)) return json({ error: 'slow down' }, 429, cors.headers);
@@ -141,4 +147,8 @@ export async function handle(request, env, deps = { fetch }) {
   }
 }
 
-export default { fetch: (request, env) => handle(request, env, { fetch }) };
+export default {
+  fetch: (request, env) => handle(request, env, { fetch }),
+  // timer (see wrangler.toml): announce the new Daily + yesterday's winners in a Discord channel (needs the DISCORD_WEBHOOK_URL secret)
+  scheduled: (event, env, ctx) => { ctx.waitUntil(postDailyAnnouncement(env, botHelpers, { fetch }).catch(() => {})); },
+};

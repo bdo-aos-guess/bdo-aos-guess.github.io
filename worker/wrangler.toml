@@ -6,8 +6,15 @@ compatibility_date = "2024-11-01"
 # Public values (not secrets). DISCORD_CLIENT_ID is the "Client ID" of your Discord application.
 DISCORD_CLIENT_ID = "1573942282673979593"
 ALLOWED_ORIGINS = "https://bdo-aos-guess.github.io"
+SITE_URL = "https://bdo-aos-guess.github.io/"
+# Public key of the Discord app (not a secret) - used to check that slash-command calls really come from Discord
+DISCORD_PUBLIC_KEY = "fd816005e4e46cbd20bafef66d652b9187d05db80d91b916720368661ca740f3"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "aos-leaderboard"
 database_id = "fb81dd9b-cf43-4707-bae7-33c097b4605e"
+
+# 00:05 Malaysia time (16:05 UTC): post yesterday's winners + "new Daily is ready" (only if DISCORD_WEBHOOK_URL secret is set)
+[triggers]
+crons = ["5 16 * * *"]
