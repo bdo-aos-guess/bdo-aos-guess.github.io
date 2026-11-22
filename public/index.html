@@ -627,9 +627,22 @@ const dailyN = () => (DAILY ? DAILY.matches.length : DAILY_LEN);
 // taken from the 3 FULL days before today (Malaysia time) so the list does not change while the day goes on.
 const hash32 = (str) => { let x = 2166136261; for (let i = 0; i < str.length; i++) { x ^= str.charCodeAt(i); x = Math.imul(x, 16777619); } return x >>> 0; };
 async function loadDaily() {
-  if (!DATA) await loadData();
   const id = dayIdNow();
   if (DAILY && DAILY.id === id) return;
+  // The update job chooses each day's questions once and publishes them as daily/<day>.json ("frozen"): everybody gets
+  // exactly those. Only if that file is missing does the page work the same set out itself from the match data.
+  try {
+    const r = await fetch('daily/' + id + '.json?t=' + Math.floor(Date.now() / 300000));
+    if (r.ok) {
+      const d = await r.json();
+      const okMatch = (m) => m && typeof m.t === 'string' && Array.isArray(m.a) && m.a.length === 3 && Array.isArray(m.b) && m.b.length === 3 && typeof m.w === 'string' && (m.f === 0 || m.f === 1);
+      if (d && d.id === id && Array.isArray(d.matches) && d.matches.length === DAILY_LEN && d.matches.every(okMatch)) {
+        DAILY = { id, number: Number(d.number) || (Math.floor((Date.parse(id + 'T00:00:00Z') - MYT_MS - Date.parse('2026-11-21T16:00:00Z')) / 864e5) + 1), matches: d.matches };
+        return;
+      }
+    }
+  } catch { /* no file: work it out below */ }
+  if (!DATA) await loadData();
   const dayStart = Date.parse(id + 'T00:00:00Z') - MYT_MS;           // today 00:00 Malaysia time, in UTC ms
   const keyOf = (m) => m.t + '|' + m.s + '|' + m.a[0].n + '|' + m.b[0].n;
   // From 23 Nov 2026 every Daily uses ONLY the matches played in a 24-hour window that ends at 10:00 (Malaysia time) on the

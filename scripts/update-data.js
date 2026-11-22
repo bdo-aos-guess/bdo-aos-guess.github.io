@@ -3,6 +3,7 @@
 // Keeps only the last KEEP_DAYS days (older matches are simply not written, i.e. deleted).
 const fs = require('fs');
 const path = require('path');
+const { dailyFor, dayIdOf } = require('./daily.js');
 
 const SOURCE = 'https://down-attack.com/api/v1/solare';
 const REGION = 'ASIA';
@@ -92,4 +93,16 @@ function toMatch(m) {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify({ generatedAt: new Date().toISOString(), keepDays: KEEP_DAYS, matches }));
   console.log(`Wrote ${matches.length} matches (last ${KEEP_DAYS} days, ${failed} players failed) to ${out}`);
+
+  // The Daily's 12 questions are chosen once per day and then frozen (see daily.js): a set that is already published is kept as it is.
+  const siteUrl = process.env.SITE_URL || 'https://bdo-aos-guess.github.io/';
+  const dailyDir = path.join(path.dirname(out), 'daily');
+  fs.mkdirSync(dailyDir, { recursive: true });
+  for (const id of [dayIdOf(Date.now()), dayIdOf(Date.now() + 864e5)]) {          // today and tomorrow (Malaysia time)
+    try {
+      const d = await dailyFor(id, matches, { siteUrl });
+      if (d) { fs.writeFileSync(path.join(dailyDir, id + '.json'), JSON.stringify(d)); console.log('Daily ' + id + ' (#' + d.number + '): ' + d.matches.length + ' questions published'); }
+      else console.log('Daily ' + id + ': nothing to publish yet (the page works it out itself)');
+    } catch (e) { console.warn('Daily ' + id + ' failed:', e.message); }
+  }
 })().catch((e) => { console.error(e); process.exit(1); });
