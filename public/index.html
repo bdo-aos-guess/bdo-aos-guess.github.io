@@ -269,6 +269,7 @@
   /* long names: one line only, extra text is cut off */
   .card .info{min-width:0}
   .cls,.name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal}
+  .name.mask{letter-spacing:.25em;color:#aab;opacity:.85}
 </style>
 </head>
 <body>
@@ -290,8 +291,8 @@
     <div class="stat"><b id="best">0</b><span>Best score</span></div>
   </div>
   <div class="ctrl">
-    <button class="ghost" id="hintBtn">💡 Hint <small>(halves points)</small></button>
-    <div class="timer"><i id="timerBar"></i><span id="timerNum">30</span></div>
+    <button class="ghost" id="hintBtn">💡 Hint <small>(shows all names · halves points)</small></button>
+    <div class="timer"><i id="timerBar"></i><span id="timerNum">20</span></div>
     <button class="ghost" id="muteBtn" title="Sound">🔊</button>
   </div>
 
@@ -322,7 +323,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const CLASS_ID = {Warrior:0,Hashashin:1,Sage:2,Wukong:3,Ranger:4,Guardian:5,Scholar:6,Drakania:7,Sorceress:8,Nova:9,Corsair:10,Lahn:11,Berserker:12,Maegu:15,Tamer:16,Shai:17,Striker:19,Musa:20,Maehwa:21,Mystic:23,Valkyrie:24,Kunoichi:25,Ninja:26,'Dark Knight':27,Wizard:28,Archer:29,Woosa:30,Witch:31,Seraph:32,Dosa:33,Deadeye:34,Agent:35};
-const ROUND_SECONDS = 30;
+const ROUND_SECONDS = 20;
 const RANKS = [[0,'Recruit'],[300,'Fighter'],[800,'Gladiator'],[1500,'Champion'],[2500,'Solare Challenger'],[4000,'Solare Incarnate']];
 const rankFor = (s) => RANKS.filter((r) => s >= r[0]).pop()[1];
 
@@ -432,13 +433,13 @@ function ago(iso) {
   if (m < 2880) return `${Math.round(m / 60)} h ago`;
   return `${Math.round(m / 1440)} days ago`;
 }
-function cards(list, full, mvpName) {
-  return list.map((p) => `
+function cards(list, full, mvpName, hideNames) {
+  return list.map((p, i) => `
     <div class="card" style="background-image:url('${img(p.cls)}')">
       ${full && p.name === mvpName ? '<div class="mvp">★ MVP</div>' : ''}
       <div class="info">
         <div class="cls">${esc(p.cls)}</div>
-        <div class="name">${esc(p.name)}</div>
+        ${hideNames && i > 0 ? '<div class="name mask">? ? ?</div>' : '<div class="name">' + esc(p.name) + '</div>'}
         <div class="hint"></div>
         ${full ? `<div class="det"><span class="kd">${p.kills} / ${p.deaths}</span><br><b>${p.rating}</b> rating<br>Rank #${p.rank}</div>` : ''}
       </div>
@@ -499,7 +500,7 @@ async function next() {
   catch { q = { error: 'Could not load match data.' }; }
   if (q.error) { $('result').innerHTML = `<div class="small" style="color:var(--mute)">${esc(q.error)}</div>`; setTimeout(next, 5000); return; }
   cur = q; answered = false;
-  $('pA').innerHTML = cards(q.teamA); $('pB').innerHTML = cards(q.teamB);
+  $('pA').innerHTML = cards(q.teamA, false, null, true); $('pB').innerHTML = cards(q.teamB, false, null, true);
   setBg(q.teamA, q.teamB);
   $('bA').disabled = $('bB').disabled = false; $('hintBtn').disabled = false;
   startTimer();
@@ -512,6 +513,11 @@ async function useHint() {
   if (h.error) return;
   const fill = (el, arr) => el.querySelectorAll('.hint').forEach((d, i) => { d.textContent = `${arr[i].rating} pts · #${arr[i].rank}`; });
   fill($('pA'), h.teamA); fill($('pB'), h.teamB);
+  const reveal = (el, team) => el.querySelectorAll('.name.mask').forEach((d) => {
+    const i = [...el.querySelectorAll('.card')].indexOf(d.closest('.card'));
+    d.textContent = team[i].name; d.classList.remove('mask');
+  });
+  reveal($('pA'), cur.teamA); reveal($('pB'), cur.teamB);
   $('arena').classList.add('hinted');
 }
 
