@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://firestore.googleapis.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://cdn.discordapp.com; connect-src 'self' https://aos-leaderboard.bdo-aos-quiz.workers.dev; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>AOS Asia – Guess the Winner</title>
 <link rel="icon" href="favicon.ico" sizes="48x48">
@@ -331,16 +331,27 @@
   .lbhead span:nth-child(3){text-align:right}.lbhead span:nth-child(4){text-align:right}
   .lbempty{padding:22px;text-align:center;color:var(--mute);border:1px dashed var(--line);border-radius:12px}
   .lbform{border-top:1px solid var(--line);padding-top:14px}
-  .lbform label{display:block;font-size:.78rem;color:var(--mute);margin-bottom:6px}
-  .lbform .row{display:flex;gap:8px}
-  .lbform input{flex:1;min-width:0;font:inherit;font-weight:700;color:var(--text);background:rgba(12,14,19,.95);border:1px solid #4a4f60;border-radius:10px;padding:11px 12px}
-  .lbform input:focus{outline:none;border-color:var(--gold)}
-  .lbform button{font:inherit;font-weight:800;cursor:pointer;border:0;border-radius:10px;padding:0 18px;color:#2a1f05;background:linear-gradient(180deg,var(--gold2),var(--gold))}
-  .lbform button:disabled{opacity:.5;cursor:default}
   .lbmsg{min-height:1.3em;margin-top:8px;font-size:.82rem;color:var(--mute)}
   .lbmsg.ok{color:var(--win)}.lbmsg.err{color:var(--lose)}
   .lbclose{font:inherit;font-size:1.3rem;line-height:1;cursor:pointer;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:10px;width:38px;height:38px;flex:none}
   .lbtop{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .lbrow .nm{display:flex;align-items:center;gap:9px;min-width:0}
+  .lbrow .nm img{width:28px;height:28px;border-radius:50%;flex:none;background:#2a2d37}
+  .lbrow .nm span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dcbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;font:inherit;font-weight:800;font-size:1rem;cursor:pointer;border:0;border-radius:12px;padding:13px;color:#fff;background:#5865F2;box-shadow:0 8px 20px -8px rgba(88,101,242,.8);transition:filter .15s,transform .15s}
+  .dcbtn:hover{filter:brightness(1.1);transform:translateY(-1px)}
+  .dcbtn svg{width:22px;height:22px;fill:#fff}
+  .lbnote{color:var(--mute);font-size:.78rem;line-height:1.5;margin-top:10px}
+  .lbuser{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:rgba(88,101,242,.12);border:1px solid rgba(88,101,242,.45);margin-bottom:10px}
+  .lbuser img{width:40px;height:40px;border-radius:50%;background:#2a2d37}
+  .lbuser b{display:block;font-size:1rem}
+  .lbuser small{color:var(--mute)}
+  .lbuser .grow{flex:1;min-width:0}
+  .lbuser .grow b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lbout{font:inherit;font-size:.74rem;color:var(--mute);background:none;border:0;text-decoration:underline;cursor:pointer}
+  .lbout:hover{color:var(--gold2)}
+  .lbsave{width:100%;font:inherit;font-weight:800;cursor:pointer;border:0;border-radius:12px;padding:13px;color:#2a1f05;background:linear-gradient(180deg,var(--gold2),var(--gold))}
+  .lbsave:disabled{opacity:.5;cursor:default}
 </style>
 </head>
 <body>
@@ -894,80 +905,128 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'Enter' && answered && $('next').style.display === 'block' && e.target.id !== 'next') $('next').click();
 });
 
-// ---------- Leaderboard (Firestore over plain HTTPS; one entry per browser, best Endless score) ----------
-const LB = { project: 'bdo-aos-guessing', key: 'AIzaSyAJ0dB7KO3KpkF26YNdLF1ijQnj0KF1clo' };   // public web key: protected by the database rules
-const LB_DOCS = 'https://firestore.googleapis.com/v1/projects/' + LB.project + '/databases/(default)/documents';
+// ---------- Leaderboard (small Cloudflare server + "Log in with Discord") ----------
+// The server checks the Discord login itself, so a name cannot be faked: the name always comes from Discord.
+const LB = { api: 'https://aos-leaderboard.bdo-aos-quiz.workers.dev', clientId: '1573942282673979593' };
+const lbReady = () => !/PLACEHOLDER/.test(LB.api + LB.clientId);
 let lbCache = null, lbLastSync = 0, lbBusy = false;
-function lbPid() {
-  if (!prof.pid || !/^[a-z0-9]{24}$/.test(prof.pid)) {
-    const a = new Uint8Array(24); try { crypto.getRandomValues(a); } catch { for (let i = 0; i < 24; i++) a[i] = Math.floor(Math.random() * 256); }
-    prof.pid = [...a].map((b) => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join(''); save('aosq2', prof);
-  }
-  return prof.pid;
+const DC_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>';
+const rnd = (n) => { const a = new Uint8Array(n); try { crypto.getRandomValues(a); } catch { for (let i = 0; i < n; i++) a[i] = Math.floor(Math.random() * 256); } return [...a].map((x) => (x % 36).toString(36)).join(''); };
+const dToken = () => (prof.dauth && prof.dauth.exp > Date.now() ? prof.dauth.token : null);
+function avatarUrl(id, hash) {
+  if (hash && /^[A-Za-z0-9_]+$/.test(hash) && /^\d+$/.test(String(id))) return 'https://cdn.discordapp.com/avatars/' + id + '/' + hash + '.png?size=64';
+  let n = 0; try { n = Number((BigInt(id) >> 22n) % 6n); } catch {}
+  return 'https://cdn.discordapp.com/embed/avatars/' + n + '.png';
 }
-const cleanName = (s) => String(s || '').replace(/[<>&"\\\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
-const iv = (o) => ({ integerValue: String(Math.max(0, Math.floor(o))) });
-async function lbFetch(force) {
-  if (!force && lbCache && Date.now() - lbCache.at < 60000) return lbCache.rows;
-  const r = await fetch(LB_DOCS + ':runQuery?key=' + LB.key, { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ structuredQuery: { from: [{ collectionId: 'leaderboard' }], orderBy: [{ field: { fieldPath: 'score' }, direction: 'DESCENDING' }], limit: 20 } }) });
-  if (!r.ok) throw new Error('http ' + r.status);
-  const rows = (await r.json()).filter((x) => x.document).map((x) => {
-    const f = x.document.fields || {};
-    return { id: x.document.name.split('/').pop(), name: String((f.name || {}).stringValue || ''), score: Number((f.score || {}).integerValue || 0),
-             rounds: Number((f.rounds || {}).integerValue || 0), streak: Number((f.streak || {}).integerValue || 0), acc: Number((f.acc || {}).integerValue || 0) };
+function discordLogin() {
+  const state = rnd(24);
+  try { sessionStorage.setItem('dstate', state); sessionStorage.setItem('lbReopen', '1'); } catch {}
+  location.href = 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
+    client_id: LB.clientId, response_type: 'token', scope: 'identify', redirect_uri: location.origin + location.pathname, state,
   });
-  lbCache = { at: Date.now(), rows }; return rows;
 }
-async function lbSubmit(name) {
-  if (g.total < 1) return { ok: false, msg: 'Play at least one round in Endless mode first.' };
-  const body = { fields: {
-    name: { stringValue: name }, score: iv(g.score), rounds: iv(g.total), streak: iv(Math.min(g.bestStreak, g.total)), acc: iv(Math.min(100, g.total ? g.right / g.total * 100 : 0)),
-  } };
+function handleAuthReturn() {       // Discord sends the player back here with the login token in the address (#access_token=...)
+  if (!location.hash || !/access_token=/.test(location.hash)) return false;
+  const p = new URLSearchParams(location.hash.slice(1));
+  let ok = false;
   try {
-    const r = await fetch(LB_DOCS + '/leaderboard/' + lbPid() + '?key=' + LB.key, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    if (r.ok) { prof.name = name; prof.lbScore = g.score; save('aosq2', prof); lbCache = null; return { ok: true }; }
-    if (r.status === 403) return { ok: false, msg: 'Not saved: you already have a higher score on the board (an entry can only go up). Keep playing to beat it.' };
-    return { ok: false, msg: 'Could not save right now (error ' + r.status + '). Try again later.' };
+    if (p.get('state') && p.get('state') === sessionStorage.getItem('dstate') && p.get('access_token')) {
+      prof.dauth = { token: p.get('access_token'), exp: Date.now() + Math.max(60, Number(p.get('expires_in')) || 600000) * 1000 - 60000 };
+      prof.duser = null; save('aosq2', prof); ok = true;
+    }
+    sessionStorage.removeItem('dstate');
+  } catch {}
+  history.replaceState(null, '', location.pathname + location.search);   // remove the token from the address bar
+  return ok;
+}
+async function lbCall(path, body) {
+  const r = await fetch(LB.api + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
+  let j = null; try { j = await r.json(); } catch {}
+  return { status: r.status, j };
+}
+function lbLogout() { prof.dauth = null; prof.duser = null; prof.lbScore = 0; save('aosq2', prof); lbCache = null; }
+async function lbMe() {
+  const t = dToken(); if (!t) return null;
+  try {
+    const { status, j } = await lbCall('/me', { token: t });
+    if (status === 401) { lbLogout(); return null; }
+    if (status === 200 && j) { prof.duser = { id: String(j.id), name: String(j.name), avatar: j.avatar || null }; save('aosq2', prof); }
+  } catch {}
+  return prof.duser || null;
+}
+async function lbFetch(force) {
+  if (!force && lbCache && Date.now() - lbCache.at < 30000) return lbCache.rows;
+  const { status, j } = await lbCall('/top');
+  if (status !== 200 || !j || !Array.isArray(j.rows)) throw new Error('http ' + status);
+  lbCache = { at: Date.now(), rows: j.rows }; return j.rows;
+}
+async function lbSubmit() {
+  const t = dToken();
+  if (!t) return { ok: false, msg: 'Please log in with Discord again.' };
+  if (g.total < 1) return { ok: false, msg: 'Play at least one round in Endless mode first.' };
+  try {
+    const { status, j } = await lbCall('/submit', {
+      token: t, score: g.score, rounds: g.total, streak: Math.min(g.bestStreak, g.total), acc: Math.min(100, Math.round(g.right / g.total * 100)),
+    });
+    if (status === 200 && j && j.ok) { prof.lbScore = Math.max(prof.lbScore || 0, g.score); save('aosq2', prof); lbCache = null;
+      return { ok: true, msg: j.improved ? '✓ Saved! You are #' + j.rank + ' on the leaderboard.' : 'Your best score on the board is ' + num(j.best) + ' (#' + j.rank + '). Beat it to move up!', rank: j.rank }; }
+    if (status === 401) { lbLogout(); return { ok: false, msg: 'Your Discord login expired. Please log in again.' }; }
+    if (status === 429) return { ok: false, msg: 'Please wait a few seconds and try again.' };
+    return { ok: false, msg: 'Could not save right now (error ' + status + '). Try again later.' };
   } catch { return { ok: false, msg: 'No connection. Try again later.' }; }
 }
 function lbAutoSync() {   // keeps a saved entry up to date while you play (at most once a minute)
-  if (!prof.name || lbBusy || g.score <= (prof.lbScore || 0) || Date.now() - lbLastSync < 60000) return;
+  if (!lbReady() || !dToken() || lbBusy || g.score <= (prof.lbScore || 0) || Date.now() - lbLastSync < 60000) return;
   lbBusy = true; lbLastSync = Date.now();
-  lbSubmit(prof.name).finally(() => { lbBusy = false; });
+  lbSubmit().finally(() => { lbBusy = false; });
 }
 function closeLb() { $('lbOv').classList.remove('on'); document.body.classList.remove('lock'); }
-async function openLb() {
-  const me = prof.pid;
+function lbFooter(user) {
+  if (!lbReady()) return '<div class="lbnote">The leaderboard is being set up. Please come back soon!</div>';
+  if (!dToken()) {
+    return '<button class="dcbtn" id="lbLogin">' + DC_ICON + 'Log in with Discord</button>' +
+      '<div class="lbnote">Log in to put your score on the board under your Discord name. We only read your Discord name and picture — never your password, messages or servers.</div>';
+  }
   const acc = g.total ? Math.round(g.right / g.total * 100) : 0;
+  return '<div class="lbuser"><img id="lbAv" alt="" src="' + (user ? esc(avatarUrl(user.id, user.avatar)) : 'data:,') + '"><div class="grow"><b id="lbMe">' + esc(user ? user.name : 'Logged in with Discord') + '</b><small>Logged in with Discord</small></div><button class="lbout" id="lbOut">Log out</button></div>' +
+    '<div class="lbnote" style="margin:0 0 10px">Your score now: <b style="color:var(--gold2)">' + num(g.score) + '</b> · ' + g.total + ' rounds · ' + acc + '% correct</div>' +
+    '<button class="lbsave" id="lbSave">Save my score</button>' +
+    '<div class="lbmsg" id="lbMsg">' + (prof.lbScore ? 'Your entry also updates by itself while you play.' : '') + '</div>';
+}
+async function openLb() {
   $('lbBox').innerHTML =
     '<div class="lbtop"><div><div class="eyebrow">Endless mode</div><h2>🏆 Leaderboard</h2><div class="lbsub">Top 20 players by score</div></div><button class="lbclose" id="lbClose" aria-label="Close">×</button></div>' +
-    '<div id="lbListWrap"><div class="lbempty">Loading…</div></div>' +
-    '<div class="lbform"><label for="lbName">Your score now: <b style="color:var(--gold2)">' + num(g.score) + '</b> · ' + g.total + ' rounds · ' + acc + '% correct. Type a name to put it on the board:</label>' +
-    '<div class="row"><input id="lbName" maxlength="16" placeholder="Your name (max 16)" autocomplete="off" spellcheck="false" value="' + esc(prof.name || '') + '"><button id="lbSave">Save score</button></div>' +
-    '<div class="lbmsg" id="lbMsg">' + (prof.name ? 'Your entry updates by itself while you play.' : 'Names are public. Do not use your real name.') + '</div></div>';
+    '<div id="lbListWrap"><div class="lbempty">' + (lbReady() ? 'Loading…' : 'Coming soon') + '</div></div><div class="lbform" id="lbForm">' + lbFooter(prof.duser) + '</div>';
   $('lbOv').classList.add('on'); document.body.classList.add('lock');
   $('lbClose').onclick = closeLb;
-  $('lbSave').onclick = async () => {
-    const name = cleanName($('lbName').value);
-    const msg = $('lbMsg'); msg.className = 'lbmsg';
-    if (!name) { msg.textContent = 'Please type a name (1–16 characters).'; msg.classList.add('err'); return; }
-    $('lbSave').disabled = true; msg.textContent = 'Saving…';
-    const res = await lbSubmit(name);
-    $('lbSave').disabled = false;
-    msg.textContent = res.ok ? '✓ Saved! You are on the leaderboard.' : res.msg; msg.classList.add(res.ok ? 'ok' : 'err');
-    if (res.ok) renderLb(await lbFetch(true).catch(() => null), me);
+  const wire = () => {
+    if ($('lbLogin')) $('lbLogin').onclick = discordLogin;
+    if ($('lbOut')) $('lbOut').onclick = () => { lbLogout(); $('lbForm').innerHTML = lbFooter(null); wire(); renderLb(lbCache && lbCache.rows); };
+    if ($('lbSave')) $('lbSave').onclick = async () => {
+      const msg = $('lbMsg'); msg.className = 'lbmsg'; msg.textContent = 'Saving…'; $('lbSave').disabled = true;
+      const res = await lbSubmit();
+      if ($('lbSave')) $('lbSave').disabled = false;
+      if (!dToken()) { $('lbForm').innerHTML = lbFooter(null); wire(); const m2 = $('lbMsg'); if (m2) m2.textContent = res.msg; } else { msg.textContent = res.msg; msg.classList.add(res.ok ? 'ok' : 'err'); }
+      if (res.ok) renderLb(await lbFetch(true).catch(() => null));
+    };
   };
-  renderLb(await lbFetch(false).catch(() => null), me);
+  wire();
+  if (!lbReady()) return;
+  renderLb(await lbFetch(false).catch(() => null));
+  if (dToken()) {   // refresh the logged-in name / picture from Discord
+    const u = await lbMe();
+    if (u && $('lbMe')) { $('lbMe').textContent = u.name; $('lbAv').src = avatarUrl(u.id, u.avatar); }
+    else if (!u && !dToken()) { $('lbForm').innerHTML = lbFooter(null); wire(); }
+  }
 }
-function renderLb(rows, me) {
+function renderLb(rows) {
   const wrap = $('lbListWrap'); if (!wrap) return;
   if (!rows) { wrap.innerHTML = '<div class="lbempty">The leaderboard is unavailable right now. Please try again later.</div>'; return; }
   if (!rows.length) { wrap.innerHTML = '<div class="lbempty">No scores yet. Be the first on the board!</div>'; return; }
-  const medal = ['🥇', '🥈', '🥉'];
+  const medal = ['🥇', '🥈', '🥉'], meId = prof.duser && prof.duser.id;
   wrap.innerHTML = '<div class="lblist"><div class="lbhead"><span>#</span><span>Player</span><span>Score</span><span>Correct</span></div>' + rows.map((r, i) =>
-    '<div class="lbrow' + (r.id === (prof.pid || me) ? ' me' : '') + '"><div class="rk' + (i < 3 ? ' m' : '') + '">' + (i < 3 ? medal[i] : i + 1) + '</div>' +
-    '<div class="nm">' + esc(r.name) + '<small>' + r.rounds + ' rounds</small></div><div class="sc">' + num(r.score) + '</div><div class="ac">' + r.acc + '%</div></div>').join('') + '</div>';
+    '<div class="lbrow' + (meId && r.id === meId ? ' me' : '') + '"><div class="rk' + (i < 3 ? ' m' : '') + '">' + (i < 3 ? medal[i] : i + 1) + '</div>' +
+    '<div class="nm"><img alt="" loading="lazy" src="' + esc(avatarUrl(r.id, r.avatar)) + '"><span>' + esc(r.name) + '</span></div><div class="sc">' + num(r.score) + '</div><div class="ac">' + num(r.acc) + '%</div></div>').join('') + '</div>';
 }
 
 function setBg(teamA, teamB) {
@@ -986,7 +1045,8 @@ function status() {
 }
 setInterval(status, 60000); loadData().then(status).catch(() => { $('status').textContent = 'offline'; });
 startGame();
-loadDaily().then(updateModeUI).catch(() => {});   // so the Daily button can show today's number and a tick when finished
+loadDaily().then(updateModeUI).catch(() => {});
+if (handleAuthReturn() || (() => { try { return sessionStorage.getItem('lbReopen') === '1'; } catch { return false; } })()) { try { sessionStorage.removeItem('lbReopen'); } catch {} openLb(); }   // so the Daily button can show today's number and a tick when finished
 </script>
 </body>
 </html>

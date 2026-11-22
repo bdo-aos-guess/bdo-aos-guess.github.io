@@ -12,3 +12,5 @@ firestore.indexes.json
 .firebase/
 server.js
 public/art/
+worker/node_modules/
+worker/.wrangler/

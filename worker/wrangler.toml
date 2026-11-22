@@ -1,0 +1,13 @@
+name = "aos-leaderboard"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+# Public values (not secrets). DISCORD_CLIENT_ID is the "Client ID" of your Discord application.
+DISCORD_CLIENT_ID = "1573942282673979593"
+ALLOWED_ORIGINS = "https://bdo-aos-guess.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "aos-leaderboard"
+database_id = "fb81dd9b-cf43-4707-bae7-33c097b4605e"
