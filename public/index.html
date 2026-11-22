@@ -282,10 +282,20 @@
   .card .spec{margin:-3px 0 6px}
   .resetlink{background:none;border:0;color:var(--mute);font:inherit;font-size:.74rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:10px}
   .resetlink:hover{color:var(--gold2)}
-  .modes{display:flex;justify-content:center;gap:8px;margin:-6px 0 16px}
-  .mode{font:inherit;font-size:.85rem;font-weight:700;letter-spacing:.04em;cursor:pointer;color:var(--mute);background:rgba(12,14,19,.9);border:1px solid #3a3e4c;border-radius:99px;padding:8px 20px}
-  .mode:hover{color:var(--text);border-color:var(--gold)}
-  .mode.on{color:#2a1f05;background:linear-gradient(180deg,var(--gold2),var(--gold));border-color:transparent}
+  .modes{display:flex;justify-content:center;margin:-4px 0 18px}
+  .seg{display:inline-flex;gap:6px;padding:5px;border-radius:18px;background:rgba(12,14,19,.92);border:1px solid #3a3e4c;box-shadow:0 10px 30px -14px #000}
+  .mode{position:relative;display:flex;align-items:center;gap:11px;min-width:190px;padding:9px 18px 9px 14px;border-radius:13px;border:1px solid transparent;background:transparent;color:var(--mute);font:inherit;text-align:left;cursor:pointer;transition:background .2s,color .2s,border-color .2s,transform .15s}
+  .mode:hover:not(.on){color:var(--text);background:rgba(255,255,255,.05);border-color:#3a3e4c}
+  .mode:active{transform:scale(.98)}
+  .mode .mi{font-size:1.45rem;line-height:1;width:30px;text-align:center;flex:none}
+  .mode .mt{display:flex;flex-direction:column;gap:2px;line-height:1.1}
+  .mode .mt b{font-size:.95rem;font-weight:800;letter-spacing:.03em}
+  .mode .mt small{font-size:.68rem;font-weight:600;letter-spacing:.04em;opacity:.8}
+  .mode.on{color:#2a1f05;background:linear-gradient(180deg,var(--gold2),var(--gold));box-shadow:0 6px 18px -6px rgba(217,180,90,.7)}
+  .mode.on .mt small{opacity:.75}
+  .mode.done:not(.on) .mt small{color:var(--win);opacity:1}
+  .dbadge{position:absolute;top:-7px;right:-4px;display:none;font-style:normal;font-size:.58rem;font-weight:900;letter-spacing:.1em;padding:2px 7px;border-radius:99px;color:#fff;background:linear-gradient(180deg,#ff7b7b,#d13a3a);box-shadow:0 4px 10px -3px rgba(255,90,90,.8);animation:pulse 1.8s infinite}
+  @media(max-width:560px){.mode{min-width:0;flex:1;padding:8px 10px;gap:8px}.mode .mi{font-size:1.2rem;width:22px}.mode .mt small{display:none}.seg{width:100%;max-width:340px}}
   .dnote{display:inline-block;max-width:520px;padding:14px 18px;border-radius:14px;background:rgba(12,14,19,.92);border:1px solid #3a3e4c;color:var(--text);line-height:1.5}
   .dnote button{font:inherit;font-weight:700;cursor:pointer;margin:10px 6px 0;padding:8px 18px;border-radius:10px;color:var(--gold2);background:rgba(27,30,37,.95);border:1px solid #4a4f60}
   .dailybox{max-width:440px;text-align:center}
@@ -316,8 +326,17 @@
     <div class="sub">Real recent 3v3 matches from top Asia players. Read the classes, pick the winning team.</div>
   </header>
   <div class="modes">
-    <button class="mode on" id="modeEndless">∞ Endless</button>
-    <button class="mode" id="modeDaily">📅 Daily</button>
+    <div class="seg" role="tablist" aria-label="Game mode">
+      <button class="mode on" id="modeEndless" role="tab">
+        <span class="mi">∞</span>
+        <span class="mt"><b>Endless</b><small id="eSub">Play without limit</small></span>
+      </button>
+      <button class="mode" id="modeDaily" role="tab">
+        <span class="mi">📅</span>
+        <span class="mt"><b id="dTitle">Daily</b><small id="dSub">15 matches</small></span>
+        <i class="dbadge" id="dBadge">NEW</i>
+      </button>
+    </div>
   </div>
 
   <div class="stats">
@@ -564,7 +583,13 @@ const dailyDone = () => !!(DAILY && prof.daily && prof.daily.id === DAILY.id && 
 function updateModeUI() {
   $('modeEndless').classList.toggle('on', mode === 'endless');
   $('modeDaily').classList.toggle('on', mode === 'daily');
-  $('modeDaily').textContent = '📅 Daily' + (DAILY ? ' #' + DAILY.number : '') + (dailyDone() ? ' ✓' : '');
+  const p = DAILY && prof.daily && prof.daily.id === DAILY.id && Array.isArray(prof.daily.answers) ? prof.daily : null;
+  const n = p ? p.answers.length : 0, N = dailyN(), done = dailyDone();
+  const right = p ? p.answers.filter((x) => x === 'c').length : 0;
+  $('dTitle').textContent = 'Daily';
+  $('dSub').textContent = done ? '✓ Done · ' + right + '/' + N : n ? n + '/' + N + ' played' : N + ' matches';
+  $('modeDaily').classList.toggle('done', done);
+  $('dBadge').style.display = DAILY && !n ? 'block' : 'none';          // "NEW" until today's Daily is started
   $('resetBtn').style.display = mode === 'daily' ? 'none' : '';
 }
 function idleArena(html) {
@@ -706,7 +731,8 @@ async function guess(pick) {
   if (mode === 'daily') {
     D.answers.push(r.correct ? 'c' : pick === 'T' ? 't' : 'w');
     prof.daily = { id: DAILY.id, answers: D.answers, score: D.score, streak: D.streak, bestStreak: D.bestStreak };
-    if (D.answers.length >= dailyN()) { finishDaily(); updateModeUI(); }
+    if (D.answers.length >= dailyN()) finishDaily();
+    updateModeUI();
   } else {
     if (g.score > prof.best) prof.best = g.score;
     prof.game = { score: g.score, streak: g.streak, bestStreak: g.bestStreak, right: g.right, total: g.total };
