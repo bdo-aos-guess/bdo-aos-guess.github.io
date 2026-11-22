@@ -16,6 +16,8 @@ const MAX_PER_ROUND = 750;                 // 150 base points x 5 (highest strea
 const MIN_PER_CORRECT = 50;                // (100 base) x 0.5 (hint used) is the least a correct answer can give
 const TOP_CACHE_MS = 20_000;
 
+const realFetch = (url, init) => fetch(url, init);   // calling the global fetch through an object would fail with "Illegal invocation"
+
 const mem = { top: new Map(), users: new Map(), hits: new Map() };   // small per-instance caches
 
 export const dayNow = (now = Date.now()) => new Date(now + MYT_MS).toISOString().slice(0, 10);
@@ -94,7 +96,7 @@ const rankOf = async (env, day, correct, points) => {
 
 const botHelpers = { dayNow, readTop: (env, scope, day) => readTop(env, scope, day), rankOf: (env, day, c, p) => rankOf(env, day, c, p) };
 
-export async function handle(request, env, deps = { fetch }) {
+export async function handle(request, env, deps = { fetch: realFetch }) {
   const url = new URL(request.url);
   // Discord slash commands: signed by Discord, so no browser origin check here
   if (url.pathname === '/discord' && request.method === 'POST') return handleDiscord(request, env, botHelpers);
@@ -148,7 +150,7 @@ export async function handle(request, env, deps = { fetch }) {
 }
 
 export default {
-  fetch: (request, env) => handle(request, env, { fetch }),
+  fetch: (request, env) => handle(request, env, { fetch: realFetch }),
   // timer (see wrangler.toml): announce the new Daily + yesterday's winners in a Discord channel (needs the DISCORD_WEBHOOK_URL secret)
-  scheduled: (event, env, ctx) => { ctx.waitUntil(postDailyAnnouncement(env, botHelpers, { fetch }).catch(() => {})); },
+  scheduled: (event, env, ctx) => { ctx.waitUntil(postDailyAnnouncement(env, botHelpers, { fetch: realFetch }).catch(() => {})); },
 };

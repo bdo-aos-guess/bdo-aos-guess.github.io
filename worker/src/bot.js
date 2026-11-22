@@ -112,7 +112,7 @@ export async function handleDiscord(request, env, h) {
 }
 
 // Cron (00:05 Malaysia time): post yesterday's winners and announce the new Daily. Needs the DISCORD_WEBHOOK_URL secret.
-export async function postDailyAnnouncement(env, h, deps = { fetch }) {
+export async function postDailyAnnouncement(env, h, deps = { fetch: (u, o) => fetch(u, o) }) {
   const hook = String(env.DISCORD_WEBHOOK_URL || '');
   if (!/^https:\/\/(?:discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(hook)) return { skipped: 'no valid webhook' };
   const today = h.dayNow(), yesterday = h.dayNow(Date.now() - 864e5);
