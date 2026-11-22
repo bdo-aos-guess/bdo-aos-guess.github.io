@@ -352,6 +352,14 @@
   .lbout:hover{color:var(--gold2)}
   .lbsave{width:100%;font:inherit;font-weight:800;cursor:pointer;border:0;border-radius:12px;padding:13px;color:#2a1f05;background:linear-gradient(180deg,var(--gold2),var(--gold))}
   .lbsave:disabled{opacity:.5;cursor:default}
+  .lbtabs{display:flex;gap:6px;margin:4px 0 10px}
+  .lbtab{flex:1;font:inherit;font-size:.82rem;font-weight:800;letter-spacing:.04em;cursor:pointer;color:var(--mute);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:9px}
+  .lbtab.on{color:#2a1f05;background:linear-gradient(180deg,var(--gold2),var(--gold));border-color:transparent}
+  .lbrow,.lbhead{grid-template-columns:42px 1fr auto 78px!important}
+  .gate ul{margin:8px 0 14px;padding-left:20px;color:var(--text);line-height:1.7;font-size:.9rem}
+  .gate .lbempty{border:0;padding:6px 0 2px}
+  .gatecancel{display:block;margin:12px auto 0;font:inherit;font-size:.8rem;color:var(--mute);background:none;border:0;text-decoration:underline;cursor:pointer}
+  .lbplay{width:100%;font:inherit;font-weight:800;cursor:pointer;border:0;border-radius:12px;padding:13px;color:#2a1f05;background:linear-gradient(180deg,var(--gold2),var(--gold))}
 </style>
 </head>
 <body>
@@ -630,7 +638,7 @@ function updateModeUI() {
   const n = p ? p.answers.length : 0, N = dailyN(), done = dailyDone();
   const right = p ? p.answers.filter((x) => x === 'c').length : 0;
   $('dTitle').textContent = 'Daily';
-  $('dSub').textContent = done ? '✓ Done · ' + right + '/' + N : n ? n + '/' + N + ' played' : N + ' matches';
+  $('dSub').textContent = !dToken() ? '🔒 Log in with Discord' : done ? '✓ Done · ' + right + '/' + N : n ? n + '/' + N + ' played' : N + ' matches';
   $('modeDaily').classList.toggle('done', done);
   $('dBadge').style.display = DAILY && !n ? 'block' : 'none';          // "NEW" until today's Daily is started
   $('resetBtn').style.display = mode === 'daily' ? 'none' : '';
@@ -646,6 +654,7 @@ function idleArena(html) {
   $('result').innerHTML = html || '';
 }
 async function startDaily() {
+  if (!dToken()) { showLoginGate(); return; }            // the Daily needs a Discord login
   mode = 'daily'; clearInterval(timerId); updateModeUI();
   try { if (!DAILY || DAILY.id !== dayIdNow()) await loadDaily(); }
   catch { D = null; renderHud(); idleArena('<div class="dnote">Could not load today\'s Daily.<br>Please try again in a little while.<br><button id="retryDaily">Retry</button></div>'); $('retryDaily').onclick = startDaily; return; }
@@ -655,15 +664,24 @@ async function startDaily() {
     idleArena('<div class="dnote">Today\'s Daily is not ready yet.<br>It is created shortly after midnight Malaysia time (UTC+8). Try again in a few minutes.<br><button id="retryDaily">Retry</button></div>');
     $('retryDaily').onclick = startDaily; return;
   }
-  const sv = prof.daily && prof.daily.id === DAILY.id ? prof.daily : {};
+  const me = await lbMe();                                 // who is playing + did they already play today (maybe on another device)?
+  if (!me) { mode = 'endless'; updateModeUI(); startGame(); showLoginGate(); return; }   // login expired
+  let sv = prof.daily && prof.daily.id === DAILY.id ? prof.daily : {};
+  if (sv.uid && me.user && sv.uid !== me.user.id) sv = {};  // another Discord account used this browser earlier: start fresh
+  if (me.today && me.today.answers) {                       // already finished today (maybe on another device): show that result
+    const arr = String(me.today.answers).split('');
+    if (!sv.answers || sv.answers.length < arr.length) sv = { id: DAILY.id, uid: me.user.id, answers: arr, score: me.today.points, streak: 0, bestStreak: 0 };
+    prof.daily = sv; prof.dres = { id: DAILY.id, rank: me.today.rank, correct: me.today.correct, points: me.today.points }; finishDaily(); save('aosq2', prof);
+  }
   const ans = Array.isArray(sv.answers) ? sv.answers.filter((a) => a === 'c' || a === 'w' || a === 't').slice(0, dailyN()) : [];
   D = { score: nz(sv.score), right: ans.filter((a) => a === 'c').length, streak: nz(sv.streak), bestStreak: nz(sv.bestStreak), answers: ans, total: ans.length, active: true };
-  renderHud(); next();
+  renderHud(); updateModeUI(); next();
+  if (prof.dpending === DAILY.id && ans.length >= dailyN()) lbSubmitDaily().then(() => { if ($('dailyOv').classList.contains('on')) showDailySummary(); });   // retry a save that failed earlier
 }
 function switchMode(m) {
   if (m === mode) return;
   clearInterval(timerId); closeDaily();
-  if (m === 'daily') startDaily(); else { mode = 'endless'; updateModeUI(); startGame(); }
+  if (m === 'daily') { if (!dToken()) { showLoginGate(); return; } startDaily(); } else { mode = 'endless'; updateModeUI(); startGame(); }
 }
 function finishDaily() {   // count the day once for the day-streak
   const st = prof.dstats || { streak: 0, lastId: '', played: 0, bestStreak: 0 };
@@ -696,13 +714,15 @@ function showDailySummary() {
   $('dailyBox').innerHTML =
     '<div class="eyebrow">Daily challenge</div><h2>Daily #' + DAILY.number + '</h2>' +
     '<div class="dsc">' + right + '/' + N + '</div><div class="dpts">' + num(p.score) + ' points</div>' +
+    '<div class="dnext" style="margin:-4px 0 8px">' + (prof.dres && prof.dres.id === DAILY.id ? '🏆 You are <b>#' + prof.dres.rank + '</b> on today\'s leaderboard' : (dToken() ? 'Saving your result to the leaderboard…' : '')) + '</div>' +
     '<div class="dgrid">' + rows.join('<br>') + '</div>' +
     '<div class="dstat"><div><b>' + (st.streak || 0) + '</b>day streak</div><div><b>' + (st.bestStreak || 0) + '</b>best streak</div><div><b>' + (st.played || 0) + '</b>days played</div></div>' +
-    '<div class="dbtns"><button class="primary" id="dShare">📋 Copy result to share</button><button id="dEndless">∞ Play endless mode</button><button id="dClose">Close</button></div>' +
+    '<div class="dbtns"><button class="primary" id="dShare">📋 Copy result to share</button><button id="dBoard">🏆 View leaderboard</button><button id="dEndless">∞ Play endless mode</button><button id="dClose">Close</button></div>' +
     '<div class="dnext">Next Daily in <b id="dLeft">--:--:--</b></div>';
   $('dailyOv').classList.add('on'); document.body.classList.add('lock');
   $('dShare').onclick = async () => { const ok = await copyText(dailyShareText()); $('dShare').textContent = ok ? '✅ Copied! Paste it in Discord' : 'Could not copy — select & copy manually'; };
   $('dEndless').onclick = () => switchMode('endless');
+  $('dBoard').onclick = () => { closeDaily(); openLb(); };
   $('dClose').onclick = closeDaily;
   const tick = () => {
     const next = (Math.floor((Date.now() + MYT_MS) / 864e5) + 1) * 864e5 - MYT_MS, s = Math.max(0, Math.floor((next - Date.now()) / 1000));
@@ -773,13 +793,12 @@ async function guess(pick) {
   } else { s.streak = 0; }
   if (mode === 'daily') {
     D.answers.push(r.correct ? 'c' : pick === 'T' ? 't' : 'w');
-    prof.daily = { id: DAILY.id, answers: D.answers, score: D.score, streak: D.streak, bestStreak: D.bestStreak };
-    if (D.answers.length >= dailyN()) finishDaily();
+    prof.daily = { id: DAILY.id, uid: (prof.duser && prof.duser.id) || null, answers: D.answers, score: D.score, streak: D.streak, bestStreak: D.bestStreak };
+    if (D.answers.length >= dailyN()) { finishDaily(); lbSubmitDaily().then(() => { if ($('dailyOv').classList.contains('on')) showDailySummary(); }); }
     updateModeUI();
   } else {
     if (g.score > prof.best) prof.best = g.score;
     prof.game = { score: g.score, streak: g.streak, bestStreak: g.bestStreak, right: g.right, total: g.total };
-    lbAutoSync();
   }
   save('aosq2', prof); renderHud();
 
@@ -905,11 +924,12 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'Enter' && answered && $('next').style.display === 'block' && e.target.id !== 'next') $('next').click();
 });
 
-// ---------- Leaderboard (small Cloudflare server + "Log in with Discord") ----------
+// ---------- Daily leaderboard (small Cloudflare server + "Log in with Discord") ----------
+// Players log in with Discord to play the Daily; when they finish, the result is sent to the leaderboard by itself.
 // The server checks the Discord login itself, so a name cannot be faked: the name always comes from Discord.
 const LB = { api: 'https://aos-leaderboard.bdo-aos-quiz.workers.dev', clientId: '1573942282673979593' };
 const lbReady = () => !/PLACEHOLDER/.test(LB.api + LB.clientId);
-let lbCache = null, lbLastSync = 0, lbBusy = false;
+let lbCache = {}, lbScope = 'today';
 const DC_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>';
 const rnd = (n) => { const a = new Uint8Array(n); try { crypto.getRandomValues(a); } catch { for (let i = 0; i < n; i++) a[i] = Math.floor(Math.random() * 256); } return [...a].map((x) => (x % 36).toString(36)).join(''); };
 const dToken = () => (prof.dauth && prof.dauth.exp > Date.now() ? prof.dauth.token : null);
@@ -918,9 +938,9 @@ function avatarUrl(id, hash) {
   let n = 0; try { n = Number((BigInt(id) >> 22n) % 6n); } catch {}
   return 'https://cdn.discordapp.com/embed/avatars/' + n + '.png';
 }
-function discordLogin() {
+function discordLogin(after) {
   const state = rnd(24);
-  try { sessionStorage.setItem('dstate', state); sessionStorage.setItem('lbReopen', '1'); } catch {}
+  try { sessionStorage.setItem('dstate', state); sessionStorage.setItem('after', after || ''); } catch {}
   location.href = 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
     client_id: LB.clientId, response_type: 'token', scope: 'identify', redirect_uri: location.origin + location.pathname, state,
   });
@@ -944,89 +964,94 @@ async function lbCall(path, body) {
   let j = null; try { j = await r.json(); } catch {}
   return { status: r.status, j };
 }
-function lbLogout() { prof.dauth = null; prof.duser = null; prof.lbScore = 0; save('aosq2', prof); lbCache = null; }
+function lbLogout() { prof.dauth = null; prof.duser = null; save('aosq2', prof); lbCache = {}; }
+// who is logged in + today's saved result. null = the login is no longer valid; offline = could not reach the server.
 async function lbMe() {
   const t = dToken(); if (!t) return null;
   try {
     const { status, j } = await lbCall('/me', { token: t });
     if (status === 401) { lbLogout(); return null; }
-    if (status === 200 && j) { prof.duser = { id: String(j.id), name: String(j.name), avatar: j.avatar || null }; save('aosq2', prof); }
+    if (status === 200 && j) { prof.duser = { id: String(j.id), name: String(j.name), avatar: j.avatar || null }; save('aosq2', prof); return { user: prof.duser, today: j.today || null, day: j.day }; }
   } catch {}
-  return prof.duser || null;
+  return { user: prof.duser, today: undefined, offline: true };
 }
-async function lbFetch(force) {
-  if (!force && lbCache && Date.now() - lbCache.at < 30000) return lbCache.rows;
-  const { status, j } = await lbCall('/top');
+async function lbFetch(scope, force) {
+  const c = lbCache[scope];
+  if (!force && c && Date.now() - c.at < 30000) return c.rows;
+  const { status, j } = await lbCall('/top?scope=' + scope);
   if (status !== 200 || !j || !Array.isArray(j.rows)) throw new Error('http ' + status);
-  lbCache = { at: Date.now(), rows: j.rows }; return j.rows;
+  lbCache[scope] = { at: Date.now(), rows: j.rows }; return j.rows;
 }
-async function lbSubmit() {
-  const t = dToken();
-  if (!t) return { ok: false, msg: 'Please log in with Discord again.' };
-  if (g.total < 1) return { ok: false, msg: 'Play at least one round in Endless mode first.' };
+// sends the finished Daily to the leaderboard (once per Discord account per day; the server ignores repeats)
+async function lbSubmitDaily() {
+  const t = dToken(), p = prof.daily;
+  if (!t || !DAILY || !p || p.id !== DAILY.id || !Array.isArray(p.answers) || p.answers.length < 5) return null;
   try {
-    const { status, j } = await lbCall('/submit', {
-      token: t, score: g.score, rounds: g.total, streak: Math.min(g.bestStreak, g.total), acc: Math.min(100, Math.round(g.right / g.total * 100)),
-    });
-    if (status === 200 && j && j.ok) { prof.lbScore = Math.max(prof.lbScore || 0, g.score); save('aosq2', prof); lbCache = null;
-      return { ok: true, msg: j.improved ? '✓ Saved! You are #' + j.rank + ' on the leaderboard.' : 'Your best score on the board is ' + num(j.best) + ' (#' + j.rank + '). Beat it to move up!', rank: j.rank }; }
-    if (status === 401) { lbLogout(); return { ok: false, msg: 'Your Discord login expired. Please log in again.' }; }
-    if (status === 429) return { ok: false, msg: 'Please wait a few seconds and try again.' };
-    return { ok: false, msg: 'Could not save right now (error ' + status + '). Try again later.' };
-  } catch { return { ok: false, msg: 'No connection. Try again later.' }; }
-}
-function lbAutoSync() {   // keeps a saved entry up to date while you play (at most once a minute)
-  if (!lbReady() || !dToken() || lbBusy || g.score <= (prof.lbScore || 0) || Date.now() - lbLastSync < 60000) return;
-  lbBusy = true; lbLastSync = Date.now();
-  lbSubmit().finally(() => { lbBusy = false; });
+    const { status, j } = await lbCall('/daily', { token: t, day: DAILY.id, answers: p.answers.join(''), points: p.score });
+    if (status === 200 && j && j.ok) { prof.dres = { id: DAILY.id, rank: j.rank, correct: j.correct, points: j.points }; prof.dpending = null; save('aosq2', prof); lbCache = {}; return j; }
+    if (status === 401) { lbLogout(); return null; }
+    if (status === 400 || status === 409) { prof.dpending = null; save('aosq2', prof); return null; }   // cannot be fixed by retrying
+  } catch {}
+  prof.dpending = DAILY.id; save('aosq2', prof);     // network problem: try again the next time the Daily is opened
+  return null;
 }
 function closeLb() { $('lbOv').classList.remove('on'); document.body.classList.remove('lock'); }
+function showLoginGate() {
+  $('lbBox').innerHTML =
+    '<div class="gate"><div class="lbtop"><div><div class="eyebrow">Daily challenge</div><h2>📅 Log in to play</h2></div><button class="lbclose" id="lbClose" aria-label="Close">×</button></div>' +
+    '<div class="lbempty">The Daily needs a Discord login.</div><ul><li>Everyone gets the same 15 matches each day.</li><li>One try per Discord account per day.</li><li>Your result goes on the leaderboard by itself, under your Discord name.</li></ul>' +
+    (lbReady() ? '<button class="dcbtn" id="lbLogin">' + DC_ICON + 'Log in with Discord</button>' : '<div class="lbnote">The login is being set up. Please come back soon!</div>') +
+    '<div class="lbnote">We only read your Discord name and picture — never your password, messages or servers.</div>' +
+    '<button class="gatecancel" id="gateCancel">Not now</button></div>';
+  $('lbOv').classList.add('on'); document.body.classList.add('lock');
+  $('lbClose').onclick = closeLb; $('gateCancel').onclick = closeLb;
+  if ($('lbLogin')) $('lbLogin').onclick = () => discordLogin('daily');
+}
 function lbFooter(user) {
-  if (!lbReady()) return '<div class="lbnote">The leaderboard is being set up. Please come back soon!</div>';
-  if (!dToken()) {
-    return '<button class="dcbtn" id="lbLogin">' + DC_ICON + 'Log in with Discord</button>' +
-      '<div class="lbnote">Log in to put your score on the board under your Discord name. We only read your Discord name and picture — never your password, messages or servers.</div>';
-  }
-  const acc = g.total ? Math.round(g.right / g.total * 100) : 0;
+  const res = prof.dres && DAILY && prof.dres.id === DAILY.id ? prof.dres : null;
+  if (!lbReady()) return '';
+  if (!dToken()) return '<button class="lbplay" id="lbPlay">📅 Play today\'s Daily</button><div class="lbnote">Log in with Discord to play and get on the board.</div>';
+  const line = res ? 'Your result today: <b style="color:var(--gold2)">' + res.correct + '/' + dailyN() + '</b> · ' + num(res.points) + ' pts · #' + res.rank
+    : (dailyDone() ? 'Saving your result…' : 'You have not played today\'s Daily yet.');
   return '<div class="lbuser"><img id="lbAv" alt="" src="' + (user ? esc(avatarUrl(user.id, user.avatar)) : 'data:,') + '"><div class="grow"><b id="lbMe">' + esc(user ? user.name : 'Logged in with Discord') + '</b><small>Logged in with Discord</small></div><button class="lbout" id="lbOut">Log out</button></div>' +
-    '<div class="lbnote" style="margin:0 0 10px">Your score now: <b style="color:var(--gold2)">' + num(g.score) + '</b> · ' + g.total + ' rounds · ' + acc + '% correct</div>' +
-    '<button class="lbsave" id="lbSave">Save my score</button>' +
-    '<div class="lbmsg" id="lbMsg">' + (prof.lbScore ? 'Your entry also updates by itself while you play.' : '') + '</div>';
+    '<div class="lbnote" style="margin:0 0 10px">' + line + '</div>' + (res || dailyDone() ? '' : '<button class="lbplay" id="lbPlay">📅 Play today\'s Daily</button>');
 }
 async function openLb() {
   $('lbBox').innerHTML =
-    '<div class="lbtop"><div><div class="eyebrow">Endless mode</div><h2>🏆 Leaderboard</h2><div class="lbsub">Top 20 players by score</div></div><button class="lbclose" id="lbClose" aria-label="Close">×</button></div>' +
+    '<div class="lbtop"><div><div class="eyebrow">Daily challenge</div><h2>🏆 Leaderboard</h2><div class="lbsub">Updates by itself when a player finishes the Daily</div></div><button class="lbclose" id="lbClose" aria-label="Close">×</button></div>' +
+    '<div class="lbtabs"><button class="lbtab" id="lbTabToday">Today</button><button class="lbtab" id="lbTabAll">All time</button></div>' +
     '<div id="lbListWrap"><div class="lbempty">' + (lbReady() ? 'Loading…' : 'Coming soon') + '</div></div><div class="lbform" id="lbForm">' + lbFooter(prof.duser) + '</div>';
   $('lbOv').classList.add('on'); document.body.classList.add('lock');
   $('lbClose').onclick = closeLb;
   const wire = () => {
-    if ($('lbLogin')) $('lbLogin').onclick = discordLogin;
-    if ($('lbOut')) $('lbOut').onclick = () => { lbLogout(); $('lbForm').innerHTML = lbFooter(null); wire(); renderLb(lbCache && lbCache.rows); };
-    if ($('lbSave')) $('lbSave').onclick = async () => {
-      const msg = $('lbMsg'); msg.className = 'lbmsg'; msg.textContent = 'Saving…'; $('lbSave').disabled = true;
-      const res = await lbSubmit();
-      if ($('lbSave')) $('lbSave').disabled = false;
-      if (!dToken()) { $('lbForm').innerHTML = lbFooter(null); wire(); const m2 = $('lbMsg'); if (m2) m2.textContent = res.msg; } else { msg.textContent = res.msg; msg.classList.add(res.ok ? 'ok' : 'err'); }
-      if (res.ok) renderLb(await lbFetch(true).catch(() => null));
-    };
+    if ($('lbPlay')) $('lbPlay').onclick = () => { closeLb(); switchMode('daily'); };
+    if ($('lbOut')) $('lbOut').onclick = () => { lbLogout(); $('lbForm').innerHTML = lbFooter(null); wire(); renderLb(lbCache[lbScope] && lbCache[lbScope].rows); updateModeUI(); };
   };
+  const tab = async (scope) => {
+    lbScope = scope;
+    $('lbTabToday').classList.toggle('on', scope === 'today'); $('lbTabAll').classList.toggle('on', scope === 'all');
+    if (!lbReady()) return;
+    $('lbListWrap').innerHTML = '<div class="lbempty">Loading…</div>';
+    renderLb(await lbFetch(scope, false).catch(() => null));
+  };
+  $('lbTabToday').onclick = () => tab('today'); $('lbTabAll').onclick = () => tab('all');
   wire();
-  if (!lbReady()) return;
-  renderLb(await lbFetch(false).catch(() => null));
-  if (dToken()) {   // refresh the logged-in name / picture from Discord
-    const u = await lbMe();
-    if (u && $('lbMe')) { $('lbMe').textContent = u.name; $('lbAv').src = avatarUrl(u.id, u.avatar); }
-    else if (!u && !dToken()) { $('lbForm').innerHTML = lbFooter(null); wire(); }
+  await tab(lbScope);
+  if (dToken()) {   // refresh the logged-in name / picture / today's result from the server
+    const me = await lbMe();
+    if (me && me.today) { prof.dres = { id: DAILY ? DAILY.id : dayIdNow(), rank: me.today.rank, correct: me.today.correct, points: me.today.points }; save('aosq2', prof); }
+    if ($('lbForm')) { $('lbForm').innerHTML = lbFooter(me ? me.user : null); wire(); }
   }
 }
 function renderLb(rows) {
   const wrap = $('lbListWrap'); if (!wrap) return;
   if (!rows) { wrap.innerHTML = '<div class="lbempty">The leaderboard is unavailable right now. Please try again later.</div>'; return; }
-  if (!rows.length) { wrap.innerHTML = '<div class="lbempty">No scores yet. Be the first on the board!</div>'; return; }
-  const medal = ['🥇', '🥈', '🥉'], meId = prof.duser && prof.duser.id;
-  wrap.innerHTML = '<div class="lblist"><div class="lbhead"><span>#</span><span>Player</span><span>Score</span><span>Correct</span></div>' + rows.map((r, i) =>
+  if (!rows.length) { wrap.innerHTML = '<div class="lbempty">' + (lbScope === 'today' ? 'Nobody has finished today\'s Daily yet. Be the first!' : 'No results yet. Be the first on the board!') + '</div>'; return; }
+  const medal = ['🥇', '🥈', '🥉'], meId = prof.duser && prof.duser.id, today = lbScope === 'today';
+  wrap.innerHTML = '<div class="lblist"><div class="lbhead"><span>#</span><span>Player</span><span>' + (today ? 'Correct' : 'Points') + '</span><span>' + (today ? 'Points' : 'Days') + '</span></div>' + rows.map((r, i) =>
     '<div class="lbrow' + (meId && r.id === meId ? ' me' : '') + '"><div class="rk' + (i < 3 ? ' m' : '') + '">' + (i < 3 ? medal[i] : i + 1) + '</div>' +
-    '<div class="nm"><img alt="" loading="lazy" src="' + esc(avatarUrl(r.id, r.avatar)) + '"><span>' + esc(r.name) + '</span></div><div class="sc">' + num(r.score) + '</div><div class="ac">' + num(r.acc) + '%</div></div>').join('') + '</div>';
+    '<div class="nm"><img alt="" loading="lazy" src="' + esc(avatarUrl(r.id, r.avatar)) + '"><span>' + esc(r.name) + '</span></div>' +
+    '<div class="sc">' + (today ? num(r.correct) + '/' + num(r.rounds) : num(r.points)) + '</div><div class="ac">' + (today ? num(r.points) : num(r.days)) + '</div></div>').join('') + '</div>';
 }
 
 function setBg(teamA, teamB) {
@@ -1046,7 +1071,8 @@ function status() {
 setInterval(status, 60000); loadData().then(status).catch(() => { $('status').textContent = 'offline'; });
 startGame();
 loadDaily().then(updateModeUI).catch(() => {});
-if (handleAuthReturn() || (() => { try { return sessionStorage.getItem('lbReopen') === '1'; } catch { return false; } })()) { try { sessionStorage.removeItem('lbReopen'); } catch {} openLb(); }   // so the Daily button can show today's number and a tick when finished
+{ const back = handleAuthReturn(); let after = ''; try { after = sessionStorage.getItem('after') || ''; sessionStorage.removeItem('after'); } catch {}
+  if (back && after === 'daily') switchMode('daily'); else if (back) openLb(); }   // so the Daily button can show today's number and a tick when finished
 </script>
 </body>
 </html>
