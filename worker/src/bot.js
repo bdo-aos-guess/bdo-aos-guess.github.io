@@ -165,7 +165,7 @@ export async function postDailyAnnouncement(env, h, deps = { fetch: (u, o) => fe
     embeds.push({ author: { name: 'BDO AOS · Arena of Solare', icon_url: LOGO(env) }, title: '🏆 Daily #' + dailyNumber(yesterday) + ' — final results', color: GOLD, image: { url: BANNER(env) } });
     embeds.push(...podiumEmbeds(rows, 'today'));
   }
-  embeds.push({ title: '📅 Daily #' + dailyNumber(today) + ' is ready!', color: GOLD, description: '12 new matches — the last 2 are harder, with ranks only and no names. One try per Discord account — good luck!' });
+  embeds.push({ title: '📅 Daily #' + dailyNumber(today) + ' is ready!', color: GOLD, description: '12 new matches — the last 2 are harder: only the left-most player of each team shows a name, the others show their rank only. One try per Discord account — good luck!' });
   const res = await deps.fetch(hook + '?with_components=true', { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ username: 'BDO AOS Daily', embeds, components: [linkRow(env, 'Play now')], allowed_mentions: NO_PINGS }) });
   return { status: res.status };

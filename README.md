@@ -9,6 +9,6 @@ A small quiz: you see two teams (classes + player names) from a real recent top-
 Match data comes from down-attack.com's Arena of Solare pages.
 
 ## How the Daily's questions are chosen
-- A Daily has 12 matches (the last 2 are harder: ranks only, no names).
+- A Daily has 12 matches (the last 2 are harder: on each team only the left-most player shows a name, the others show their rank only).
 - From 23 Nov 2026 each day's questions come from a 24-hour window of real matches (10:00 two days before to 10:00 the day before, Malaysia time). The windows never overlap, so a question never comes back.
 - The update job (`scripts/update-data.js`, `scripts/daily.js`) picks the day's questions once and publishes them as `daily/<day>.json`. Later updates copy that file unchanged, so everybody gets the same questions all day.
