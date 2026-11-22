@@ -620,6 +620,7 @@ function startGame() {
 const MYT_MS = 8 * 3600e3;                                   // the daily day runs on Malaysia time (UTC+8)
 const dayIdNow = () => new Date(Date.now() + MYT_MS).toISOString().slice(0, 10);
 const nz = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : 0);
+const DAILY_ONE_DAY_FROM = '2026-11-23';   // from this day on, no question can ever repeat, and everybody gets the same ones (see loadDaily)
 const DAILY_LEN = 12, HARD_FROM = 10;   // 12 matches; questions 11 and 12 (index 10, 11) are the harder ones: ranks only, no names
 const dailyN = () => (DAILY ? DAILY.matches.length : DAILY_LEN);
 // Builds today's Daily from the normal match data (no separate file): 12 matches picked by a hash of (today + match),
@@ -631,8 +632,15 @@ async function loadDaily() {
   if (DAILY && DAILY.id === id) return;
   const dayStart = Date.parse(id + 'T00:00:00Z') - MYT_MS;           // today 00:00 Malaysia time, in UTC ms
   const keyOf = (m) => m.t + '|' + m.s + '|' + m.a[0].n + '|' + m.b[0].n;
-  let pool = DATA.matches.filter((m) => { const t = new Date(m.t).getTime(); return t >= dayStart - 3 * 864e5 && t < dayStart; });
-  if (pool.length < DAILY_LEN) pool = DATA.matches.slice();                  // too few older matches: use the normal data as is
+  // From 23 Nov 2026 every Daily uses ONLY the matches played in a 24-hour window that ends at 10:00 (Malaysia time) on the
+  // day before: [10:00 two days ago, 10:00 yesterday). The windows follow each other without a gap or overlap, so a match
+  // belongs to exactly one day and a question can never come back. The window ends at 10:00 so that every copy of the
+  // match data that players can have (it is refreshed at 12:05 and 00:05) already contains all of it: everybody gets the
+  // same questions, even right after midnight. (Before 23 Nov the last 3 days were used, so today's Daily is unchanged.)
+  const inRange = (from, to) => DATA.matches.filter((m) => { const t = new Date(m.t).getTime(); return t >= from && t < to; });
+  let pool = id >= DAILY_ONE_DAY_FROM ? inRange(dayStart - 38 * 3600e3, dayStart - 14 * 3600e3) : inRange(dayStart - 3 * 864e5, dayStart);
+  if (pool.length < DAILY_LEN) pool = inRange(dayStart - 3 * 864e5, dayStart);   // very rare: that window had fewer than 12 matches
+  if (pool.length < DAILY_LEN) pool = DATA.matches.slice();                  // last resort: the normal data as is
   if (pool.length < 3) throw new Error('not enough matches');
   const ranked = pool.map((m) => ({ m, h: hash32(id + '|' + keyOf(m)) }))
     .sort((x, y) => x.h - y.h || (keyOf(x.m) < keyOf(y.m) ? -1 : 1)).slice(0, DAILY_LEN);
