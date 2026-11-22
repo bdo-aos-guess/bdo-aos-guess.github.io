@@ -13,3 +13,9 @@ CREATE TABLE IF NOT EXISTS daily_scores (
 );
 CREATE INDEX IF NOT EXISTS idx_daily_rank ON daily_scores (day, correct DESC, points DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_user ON daily_scores (id);
+
+-- Small key/value store for the Discord bot (e.g. the id of the live leaderboard message in the channel).
+CREATE TABLE IF NOT EXISTS bot_state (
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL
+);

@@ -65,15 +65,15 @@ export function podiumEmbeds(rows, scope) {
   }));
 }
 
-export function boardEmbeds(rows, scope, day, env) {
+export function boardEmbeds(rows, scope, day, env, opts = {}) {
   const today = scope === 'today';
   const head = {
     author: { name: 'BDO AOS · Arena of Solare', icon_url: LOGO(env) },
     title: today ? '📅 Daily #' + dailyNumber(day) + ' — today\'s leaderboard' : '🏆 All-time leaderboard',
     description: today ? 'Resets <t:' + nextReset() + ':R>' : 'Total points over every Daily',
     color: GOLD,
-    image: { url: BANNER(env) },
   };
+  if (opts.banner !== false) head.image = { url: BANNER(env) };
   if (!rows.length) {
     head.description += '\n\n' + (today ? 'Nobody has finished today\'s Daily yet — be the first! 🏁' : 'No results yet.');
     return [head];
@@ -156,8 +156,8 @@ export async function handleDiscord(request, env, h) {
 
 // Cron (00:05 Malaysia time): post yesterday's winners and announce the new Daily. Needs the DISCORD_WEBHOOK_URL secret.
 export async function postDailyAnnouncement(env, h, deps = { fetch: (u, o) => fetch(u, o) }) {
-  const hook = String(env.DISCORD_WEBHOOK_URL || '');
-  if (!/^https:\/\/(?:discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(hook)) return { skipped: 'no valid webhook' };
+  const hook = validHook(env);
+  if (!hook) return { skipped: 'no valid webhook' };
   const today = h.dayNow(), yesterday = h.dayNow(Date.now() - 864e5);
   const rows = await h.readTop(env, 'today', yesterday);
   const embeds = [];
@@ -166,7 +166,40 @@ export async function postDailyAnnouncement(env, h, deps = { fetch: (u, o) => fe
     embeds.push(...podiumEmbeds(rows, 'today'));
   }
   embeds.push({ title: '📅 Daily #' + dailyNumber(today) + ' is ready!', color: GOLD, description: '12 new matches — the last 2 are harder, with ranks only and no names. One try per Discord account — good luck!' });
-  const res = await deps.fetch(hook, { method: 'POST', headers: { 'content-type': 'application/json' },
+  const res = await deps.fetch(hook + '?with_components=true', { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ username: 'BDO AOS Daily', embeds, components: [linkRow(env, 'Play now')], allowed_mentions: NO_PINGS }) });
   return { status: res.status };
+}
+
+// only real Discord webhook addresses are accepted: https://discord.com/api/webhooks/<id>/<token>
+const validHook = (env) => {
+  try {
+    const u = new URL(String(env.DISCORD_WEBHOOK_URL || ''));
+    const p = u.pathname.split('/');
+    const ok = u.protocol === 'https:' && (u.hostname === 'discord.com' || u.hostname === 'discordapp.com') && u.search === '' && p.length === 5
+      && p[1] === 'api' && p[2] === 'webhooks' && /^[0-9]+$/.test(p[3]) && /^[A-Za-z0-9_-]+$/.test(p[4]);
+    return ok ? u.origin + u.pathname : null;
+  } catch { return null; }
+};
+
+// Live update: whenever a player finishes the Daily on the website, the channel of the webhook gets
+//   "🎉 Name just finished ... now #3" + the fresh leaderboard, and the previous live post of the same day is removed.
+export async function announceFinish(env, h, f, deps = { fetch: (u, o) => fetch(u, o) }) {
+  const hook = validHook(env);
+  if (!hook) return { skipped: 'no valid webhook' };
+  const rows = await h.readTop(env, 'today', f.day);
+  const content = '🎉 **' + md(f.name) + '** just finished — **' + f.correct + '/' + f.rounds + '** · ' + num(f.points) + ' pts · now **#' + f.rank + '**';
+  const res = await deps.fetch(hook + '?wait=true&with_components=true', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'BDO AOS Daily', content, embeds: boardEmbeds(rows, 'today', f.day, env, { banner: false }), components: [linkRow(env, "Play today's Daily")], allowed_mentions: NO_PINGS }) });
+  if (!res.ok) return { status: res.status };
+  const msg = await res.json().catch(() => null);
+  if (!msg || !/^[0-9]+$/.test(String(msg.id))) return { status: res.status };
+  let prev = null;
+  try { const old = await env.DB.prepare('SELECT v FROM bot_state WHERE k = ?1').bind('live').first(); prev = old ? JSON.parse(old.v) : null; } catch {}
+  await env.DB.prepare('INSERT INTO bot_state (k, v) VALUES (?1, ?2) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('live', JSON.stringify({ day: f.day, id: String(msg.id) })).run();
+  // remove the previous live post of the SAME day (yesterday's final board stays in the channel)
+  if (prev && prev.day === f.day && /^[0-9]+$/.test(String(prev.id)) && prev.id !== String(msg.id)) {
+    try { await deps.fetch(hook + '/messages/' + prev.id, { method: 'DELETE' }); } catch {}
+  }
+  return { status: res.status, posted: String(msg.id) };
 }

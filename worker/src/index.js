@@ -8,7 +8,7 @@
 // (GET /oauth2/@me): it must have been issued to OUR Discord app and carry the "identify" scope.
 // Names always come from Discord, never from the browser. Tokens are never stored.
 
-import { handleDiscord, postDailyAnnouncement } from './bot.js';
+import { handleDiscord, postDailyAnnouncement, announceFinish } from './bot.js';
 
 const DISCORD_ME = 'https://discord.com/api/v10/oauth2/@me';
 const MYT_MS = 8 * 3600e3;                 // the Daily day runs on Malaysia time (UTC+8)
@@ -97,7 +97,7 @@ const rankOf = async (env, day, correct, points) => {
 
 const botHelpers = { dayNow, readTop: (env, scope, day) => readTop(env, scope, day), rankOf: (env, day, c, p) => rankOf(env, day, c, p) };
 
-export async function handle(request, env, deps = { fetch: realFetch }) {
+export async function handle(request, env, deps = { fetch: realFetch }, ctx) {
   const url = new URL(request.url);
   // Discord slash commands: signed by Discord, so no browser origin check here
   if (url.pathname === '/discord' && request.method === 'POST') return handleDiscord(request, env, botHelpers);
@@ -146,7 +146,10 @@ export async function handle(request, env, deps = { fetch: realFetch }) {
         `INSERT OR IGNORE INTO daily_scores (day, id, name, avatar, correct, points, rounds, answers, updated)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`).bind(day, user.id, user.name, user.avatar, correct, points, rounds, answers, Date.now()).run();
       mem.top.clear();
-      return json({ ok: true, already: false, correct, points, rounds, answers, rank: await rankOf(env, day, correct, points) }, 200, cors.headers);
+      const rank = await rankOf(env, day, correct, points);
+      // pop the fresh leaderboard into the Discord channel (does not delay or break the answer to the player)
+      if (ctx && ctx.waitUntil) ctx.waitUntil(announceFinish(env, botHelpers, { day, name: user.name, correct, points, rounds, rank }, deps).catch(() => {}));
+      return json({ ok: true, already: false, correct, points, rounds, answers, rank }, 200, cors.headers);
     }
     return json({ error: 'not found' }, 404, cors.headers);
   } catch (e) {
@@ -155,7 +158,7 @@ export async function handle(request, env, deps = { fetch: realFetch }) {
 }
 
 export default {
-  fetch: (request, env) => handle(request, env, { fetch: realFetch }),
+  fetch: (request, env, ctx) => handle(request, env, { fetch: realFetch }, ctx),
   // timer (see wrangler.toml): announce the new Daily + yesterday's winners in a Discord channel (needs the DISCORD_WEBHOOK_URL secret)
   scheduled: (event, env, ctx) => { ctx.waitUntil(postDailyAnnouncement(env, botHelpers, { fetch: realFetch }).catch(() => {})); },
 };
